@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Isaac Sim installation and setup
+    url: https://docs.isaacsim.omniverse.nvidia.com/
+    about: Installing or running Isaac Sim itself is covered by NVIDIA's documentation.

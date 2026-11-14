@@ -1,0 +1,5 @@
+# Keep LF line endings in the repository, also when it is edited on Windows.
+* text=auto eol=lf
+*.usd binary
+*.usdc binary
+*.usdz binary

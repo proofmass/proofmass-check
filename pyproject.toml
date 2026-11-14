@@ -1,0 +1,66 @@
+[project]
+name = "proofmass-check"
+dynamic = ["version"]
+description = "Physics checks for SimReady OpenUSD assets: does the asset behave in a simulator?"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "The proofmass-check authors" }]
+requires-python = ">=3.11"
+# Only numpy. pxr (OpenUSD) comes from the engine's environment: Isaac Sim brings its own build,
+# and a second one from usd-core can clash with it. Outside Isaac Sim, install the "usd" extra.
+dependencies = ["numpy>=1.26"]
+keywords = ["openusd", "simready", "physics", "simulation", "robotics", "isaac-sim", "newton"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+[project.optional-dependencies]
+usd = ["usd-core>=25.5"]
+
+[project.urls]
+Homepage = "https://github.com/proofmass/proofmass-check"
+Issues = "https://github.com/proofmass/proofmass-check/issues"
+Changelog = "https://github.com/proofmass/proofmass-check/blob/main/CHANGELOG.md"
+
+[project.scripts]
+proofmass-check = "proofmass_check.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/proofmass_check/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/proofmass_check"]
+
+[dependency-groups]
+dev = [
+    "jsonschema>=4.23",
+    "pytest>=9.0",
+    "ruff>=0.17",
+    "usd-core>=25.5",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B", "BLE", "C90", "I", "N", "UP", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["gpu: runs a real engine (Isaac Sim or Newton) on a GPU; not run in CI"]
+addopts = "-m 'not gpu'"

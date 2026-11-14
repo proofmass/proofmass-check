@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: 2026 The proofmass-check authors
+# SPDX-License-Identifier: Apache-2.0
+import json
+from importlib import resources
+
+import jsonschema
+from fake_engine import IdealEngine
+
+from proofmass_check import report
+from proofmass_check.engines.base import LoadOutcome
+from proofmass_check.rules import Settings
+from proofmass_check.runner import run_checks
+
+SCHEMA = json.loads(resources.files("proofmass_check").joinpath("results.schema.json").read_text(encoding="utf-8"))
+
+
+def test_a_full_run_on_the_gripper(gripper, tmp_path):
+    run = run_checks(IdealEngine(), gripper, Settings())
+    assert run.passed
+    assert [(r.id, r.verdict) for r in run.results] == [
+        ("LOAD", "PASS"), ("DROP", "N/A"), ("HOLD", "PASS"), ("TRACK", "PASS"), ("LIMIT", "PASS"),
+        ("STABLE", "PASS"), ("SPEED", "N/A"), ("PASSIVE", "N/A"), ("GRIP", "PASS"), ("SHAKE", "PASS"),
+        ("STAND", "N/A"), ("DRIVE", "N/A"), ("TURN", "N/A"), ("STEER", "N/A"),
+    ]  # fmt: skip
+    data = report.to_dict(run)
+    jsonschema.validate(data, SCHEMA)
+    assert data["asset"]["name"] == "unit_gripper" and len(data["asset"]["sha256"]) == 64
+    assert data["engine"] == {"name": "fake", "versions": {"fake": "1"}}
+    path = report.write(data, tmp_path / "out")
+    assert json.loads(path.read_text(encoding="utf-8")) == data
+
+
+def test_other_checks_wait_for_load(arm):
+    class DropsAJoint(IdealEngine):
+        def load(self):
+            return LoadOutcome(missing=("arm_joint",), masses={"/unit_arm/base": 8.0, "/unit_arm/arm": 1.44})
+
+    run = run_checks(DropsAJoint(), arm, Settings())
+    assert not run.passed
+    assert {r.id: r.verdict for r in run.results}["HOLD"] == "N/A"
+    assert run.results[2].detail == "the engine did not build the asset as the USD describes it (LOAD)"
+
+
+def test_settings_that_differ_from_the_spec_are_noted(prop):
+    run = run_checks(IdealEngine(), prop, Settings(settle_s=4.0))
+    assert run.notes == ("settings differ from the spec: settle_s is 4.0 (spec: 1.5)",)
+
+
+def test_results_after_an_error(prop, tmp_path):
+    asset_file = tmp_path / "prop.usda"
+    data = report.error_dict(asset_file, "physx", "Traceback ...")
+    jsonschema.validate(data, SCHEMA)
+    assert data["passed"] is False

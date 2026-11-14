@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/proofmass/proofmass-check/blob/main/src/proofmass_check/results.schema.json",
+  "title": "proofmass-check results",
+  "description": "What one run of proofmass-check found. Lengths in m, angles in rad, masses in kg, times in s.",
+  "type": "object",
+  "required": ["schema_version", "tool", "spec_version", "asset", "engine", "passed"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {"name": {"const": "proofmass-check"}, "version": {"type": "string"}}
+    },
+    "spec_version": {"type": "string", "description": "The version of docs/spec.md the checks follow."},
+    "asset": {
+      "type": "object",
+      "required": ["file", "sha256"],
+      "properties": {
+        "file": {"type": "string"},
+        "sha256": {"type": "string", "description": "Of the root USD file only, not of the layers it references."},
+        "name": {"type": "string", "description": "The default prim's name."},
+        "variants": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "engine": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "description": "As on the command line, for example physx or newton."},
+        "versions": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "settle_s": {"type": "number"},
+        "linear_tol": {"type": "number"},
+        "angular_tol": {"type": "number"},
+        "random_poses": {"type": "integer"},
+        "floor": {"type": ["number", "null"], "description": "The floor height, or null for a run without a floor."}
+      }
+    },
+    "notes": {"type": "array", "items": {"type": "string"}},
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "verdict", "detail"],
+        "properties": {
+          "id": {"enum": ["LOAD", "DROP", "HOLD", "TRACK", "LIMIT", "STABLE", "SPEED", "PASSIVE", "GRIP", "SHAKE",
+                         "STAND", "DRIVE", "TURN", "STEER"]},
+          "title": {"type": "string"},
+          "verdict": {"enum": ["PASS", "FAIL", "N/A"]},
+          "detail": {"type": "string", "description": "The measured numbers, or why the check does not apply."}
+        }
+      }
+    },
+    "passed": {"type": "boolean", "description": "True when no check failed and the run did not stop with an error."},
+    "seconds": {"type": "number"},
+    "error": {"type": "string", "description": "Present when the run stopped with an error."}
+  }
+}

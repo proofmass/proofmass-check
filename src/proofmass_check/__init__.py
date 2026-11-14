@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 The proofmass-check authors
+# SPDX-License-Identifier: Apache-2.0
+"""Physics checks for SimReady OpenUSD assets.
+
+Start with the command line: `proofmass-check run asset.usd --engine physx`.
+docs/spec.md describes every check, its rule and its numbers.
+"""
+
+__version__ = "0.1.0.dev0"
