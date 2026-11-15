@@ -8,6 +8,8 @@ and the spec version.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-15
+
 ### Fixed
 
 - Newton: a run no longer stops with an IndexError on an asset whose last joint is a fixed joint,
@@ -29,5 +31,6 @@ The first release. The checks follow docs/spec.md, version 0.2.
 - The `proofmass-check` command: `run` and `list-checks`.
 - Engines: PhysX in Isaac Sim 6.1, and Newton as an experiment.
 
-[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/proofmass/proofmass-check/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/proofmass/proofmass-check/releases/tag/v0.1.0
