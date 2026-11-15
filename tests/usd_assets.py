@@ -98,6 +98,23 @@ def arm(path: Path) -> Path:
     return path
 
 
+def tooled_arm(path: Path) -> Path:
+    """The arm with a 0.1 kg tool fixed to its tip: a fixed joint after the last moving joint.
+
+    tool: a 0.02 m box from x = 0.4 to 0.42, thinner than the arm, so at 30 deg it stays above the floor.
+    """
+    stage = Usd.Stage.Open(str(arm(path)))
+    body(stage, "/unit_arm/tool", (0.4, 0, 0.25), 0.1)
+    box_collider(stage, "/unit_arm/tool/collider", (0.01, 0, 0), (0.01, 0.01, 0.01))
+    fixed = UsdPhysics.FixedJoint.Define(stage, "/unit_arm/tool_joint")
+    fixed.CreateBody0Rel().SetTargets(["/unit_arm/arm"])
+    fixed.CreateBody1Rel().SetTargets(["/unit_arm/tool"])
+    fixed.CreateLocalPos0Attr(Gf.Vec3f(0.4, 0, 0))
+    fixed.CreateLocalPos1Attr(Gf.Vec3f(0, 0, 0))
+    stage.Save()
+    return path
+
+
 def gripper(path: Path) -> Path:
     """A hand fixed to the world with two fingers that close along X on a site 0.08 m up.
 

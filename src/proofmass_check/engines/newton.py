@@ -158,9 +158,8 @@ class _Sim:
         self.control = model.control()
         self.target0 = model.joint_target_q.numpy().copy()
         names = [label.rsplit("/", 1)[-1] for label in model.joint_label]
-        # joint_q_start can hold one entry more than there are joints, so zip is not strict here.
-        self.q_at = dict(zip(names, model.joint_q_start.numpy().tolist(), strict=False))
-        self.qd_at = dict(zip(names, model.joint_qd_start.numpy().tolist(), strict=False))
+        self.q_at = _first_index(names, model.joint_q_start.numpy().tolist(), model.joint_coord_count)
+        self.qd_at = _first_index(names, model.joint_qd_start.numpy().tolist(), model.joint_dof_count)
         free = int(newton.JointType.FREE)
         self.free = [n for n, t in zip(names, model.joint_type.numpy().tolist(), strict=True) if t == free]
         self.bodies = dict(info["path_body_map"])  # USD path: body index
@@ -206,6 +205,16 @@ class _Sim:
         for name, value in values.items():
             target[self.q_at[name]] = value
         self.control.joint_target_q.assign(target)
+
+
+def _first_index(names, starts, total) -> dict[str, int]:
+    """Each joint's first index in a joint array of total entries (joint_q or joint_qd).
+
+    A fixed joint has no entry: its start is the next joint's start, or total for the last joint.
+    Such joints are left out, so that no one reads another joint's value under their name.
+    """
+    ends = [*starts[1:], total][: len(names)]  # starts can hold one entry more than there are joints
+    return {name: start for name, start, end in zip(names, starts, ends, strict=False) if end > start}
 
 
 def _add_box(builder, box) -> int:
