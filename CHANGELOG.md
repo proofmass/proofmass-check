@@ -8,6 +8,12 @@ and the spec version.
 
 ## [Unreleased]
 
+### Fixed
+
+- Newton: a run no longer stops with an IndexError on an asset whose last joint is a fixed joint,
+  such as a gripper with fingertips fixed to its fingers. A fixed joint has no position in Newton,
+  and the engine read one for it.
+
 ## [0.1.0] - 2026-11-15
 
 The first release. The checks follow docs/spec.md, version 0.2.

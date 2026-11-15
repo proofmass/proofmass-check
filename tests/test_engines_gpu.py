@@ -53,6 +53,12 @@ def test_an_arm_follows_its_drive(engine, arm):
     expect(results, "SPEED", "PASS" if "SPEED" in engine.supported else "N/A")
 
 
+def test_a_fixed_joint_after_the_last_moving_joint(engine, tooled_arm):
+    results = verdicts(engine, tooled_arm)
+    for check_id in ("LOAD", "HOLD", "TRACK", "LIMIT", "STABLE"):
+        expect(results, check_id)
+
+
 def test_a_drawer_and_a_door_open(engine, cabinet):
     results = verdicts(engine, cabinet)
     expect(results, "LOAD")
