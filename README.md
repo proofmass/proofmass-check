@@ -53,7 +53,14 @@ time it starts. proofmass-check never accepts it for you.
 
 ## Install
 
-Not on PyPI yet. In the Python environment of your engine:
+Install it in the Python environment of your engine: Isaac Sim's Python for `physx`, or the Python
+that has Newton for `newton`.
+
+```bash
+pip install proofmass-check
+```
+
+The development version, from GitHub:
 
 ```bash
 pip install "proofmass-check @ git+https://github.com/proofmass/proofmass-check"
