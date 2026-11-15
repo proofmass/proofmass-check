@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 The proofmass-check authors
+# SPDX-FileCopyrightText: 2026 Paweł Kikta
 # SPDX-License-Identifier: Apache-2.0
 """Lets `python -m proofmass_check` work like the `proofmass-check` command."""
 

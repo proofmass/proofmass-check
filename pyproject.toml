@@ -5,7 +5,7 @@ description = "Physics checks for SimReady OpenUSD assets: does the asset behave
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
-authors = [{ name = "The proofmass-check authors" }]
+authors = [{ name = "Paweł Kikta" }]
 requires-python = ">=3.11"
 # Only numpy. pxr (OpenUSD) comes from the engine's environment: Isaac Sim brings its own build,
 # and a second one from usd-core can clash with it. Outside Isaac Sim, install the "usd" extra.

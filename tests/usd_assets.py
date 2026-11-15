@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 The proofmass-check authors
+# SPDX-FileCopyrightText: 2026 Paweł Kikta
 # SPDX-License-Identifier: Apache-2.0
 """Small test assets, built in code so that every number in the tests can be traced to a line here.
 
