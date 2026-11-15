@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 The proofmass-check authors
+# SPDX-FileCopyrightText: 2026 Paweł Kikta
 # SPDX-License-Identifier: Apache-2.0
 """Read the physics of an asset from its USD into the classes of model.py.
 

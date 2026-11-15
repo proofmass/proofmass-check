@@ -99,3 +99,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). To report a security problem, see [SECUR
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Developed by [Proofmass](https://proofmass.com).
