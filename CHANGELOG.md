@@ -8,6 +8,23 @@ and the spec version.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-16
+
+### Fixed
+
+- PhysX: every test now starts with each joint at its rest position, as the file has it. Isaac Sim
+  reset a PhysX mimic follower to 0. On a gripper whose 0 is the closed end, that finger started
+  inside the grip box and pushed it away, so GRIP and SHAKE measured a box that was no longer at
+  the grasp centre. Results of GRIP, SHAKE and SPEED can change for an asset with a mimic joint
+  whose rest position is not 0.
+
+### Changed
+
+- SPEED: when a joint was faster in the first 5 steps, which the check does not measure, than
+  after them, the result gives that speed too. A short joint such as a gripper finger ends its
+  move in those steps, and the result showed only the speed of a joint that already stood. The
+  rule and the verdicts are as before.
+
 ## [0.1.1] - 2026-11-15
 
 ### Fixed
@@ -31,6 +48,7 @@ The first release. The checks follow docs/spec.md, version 0.2.
 - The `proofmass-check` command: `run` and `list-checks`.
 - Engines: PhysX in Isaac Sim 6.1, and Newton as an experiment.
 
-[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/proofmass/proofmass-check/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/proofmass/proofmass-check/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/proofmass/proofmass-check/releases/tag/v0.1.0

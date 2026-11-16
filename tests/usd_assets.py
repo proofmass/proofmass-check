@@ -148,6 +148,30 @@ def gripper(path: Path) -> Path:
     return path
 
 
+def mimic_gripper(path: Path) -> Path:
+    """The gripper, half closed in the file, with finger_l a PhysX mimic follower of finger_r.
+
+    Each finger rests 0.01 m toward the centre: finger_l at joint position 0.01, finger_r at -0.01.
+    finger_l has no drive: PhysX holds finger_l + 1 x finger_r = 0.
+    """
+    stage = Usd.Stage.Open(str(gripper(path)))
+    for side, rest in (("l", 0.01), ("r", -0.01)):
+        finger = stage.GetPrimAtPath(f"/unit_gripper/finger_{side}")
+        start = finger.GetAttribute("xformOp:translate").Get()
+        finger.GetAttribute("xformOp:translate").Set(start + Gf.Vec3d(rest, 0, 0))
+        slide = stage.GetPrimAtPath(f"/unit_gripper/finger_{side}_joint")
+        slide.AddAppliedSchema("PhysicsJointStateAPI:linear")
+        slide.CreateAttribute("state:linear:physics:position", Sdf.ValueTypeNames.Float).Set(rest)
+    follower = stage.GetPrimAtPath("/unit_gripper/finger_l_joint")
+    follower.RemoveAPI(UsdPhysics.DriveAPI, "linear")
+    follower.AddAppliedSchema("PhysxMimicJointAPI:rotX")
+    follower.CreateAttribute("physxMimicJoint:rotX:gearing", Sdf.ValueTypeNames.Float).Set(1.0)
+    follower.CreateAttribute("physxMimicJoint:rotX:offset", Sdf.ValueTypeNames.Float).Set(0.0)
+    follower.CreateRelationship("physxMimicJoint:rotX:referenceJoint").SetTargets(["/unit_gripper/finger_r_joint"])
+    stage.Save()
+    return path
+
+
 def cabinet(path: Path) -> Path:
     """A cabinet fixed to the world with a drawer and a door, both without drives.
 

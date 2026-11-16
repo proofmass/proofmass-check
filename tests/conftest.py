@@ -51,6 +51,11 @@ def gripper(tmp_path):
 
 
 @pytest.fixture
+def mimic_gripper(tmp_path):
+    return _read("mimic_gripper", tmp_path)
+
+
+@pytest.fixture
 def cabinet(tmp_path):
     return _read("cabinet", tmp_path)
 
