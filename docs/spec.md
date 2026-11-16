@@ -132,6 +132,10 @@ damping-only drive is a wheel there, so PASSIVE does not push it.
 - **Rule:** after the first `SPEED_SKIP_STEPS` = 5 steps, the joint's speed stays within its
   speed limit plus `SPEED_TOL` = 0.05 of it. At the end, every driven joint is inside its limits,
   give or take `LIMIT_TOL` tolerances.
+- **Report:** the highest speed after the first steps. A short joint, such as a gripper finger,
+  can end its move inside the first steps, and the check then measures a joint that already
+  stands. When the joint was faster in the first steps, the result gives that speed too. It does
+  not change the verdict.
 
 ### PASSIVE: a door or drawer opens to its limits and stops there
 

@@ -69,3 +69,13 @@ def test_a_gripper_holds_its_payload(engine, gripper):
     results = verdicts(engine, gripper)
     for check_id in ("LOAD", "HOLD", "TRACK", "LIMIT", "GRIP", "SHAKE"):
         expect(results, check_id)
+
+
+def test_a_reset_puts_a_mimic_follower_at_its_rest_position(engine, mimic_gripper):
+    """Isaac Sim alone resets a PhysX mimic follower to 0: the finger would start inside the grip box."""
+    if engine.name != "physx":
+        pytest.skip("the asset couples its fingers with a PhysX mimic joint")
+    engine.open(mimic_gripper, floor=None)
+    after_reset = engine.settle({"finger_r_joint": -0.01}, seconds=0.0)
+    assert after_reset.positions["finger_l_joint"] == pytest.approx(0.01, abs=1e-5)
+    assert after_reset.positions["finger_r_joint"] == pytest.approx(-0.01, abs=1e-5)

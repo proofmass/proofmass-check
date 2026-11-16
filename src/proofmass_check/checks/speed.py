@@ -38,17 +38,30 @@ def speed(engine: Engine, driven: Sequence[Joint], tested: Sequence[Joint], sett
     Each one moves to far_target for SPEED_SECONDS. After the first SPEED_SKIP_STEPS steps its speed
     must stay within its limit plus SPEED_TOL. At the end, every driven joint must be inside its
     limits: a coupling that blows up at a large step pushes joints out of them.
+
+    A short joint can end its move inside the steps that are not measured, and the measured speed is
+    then that of a joint that already stands. So when the joint was faster in those steps, the
+    result gives that speed too. It does not change the verdict.
     """
     rows, ok_all = [], True
     for joint in tested:
         motion = engine.move({**rest_pose(driven), joint.name: far_target(joint)}, SPEED_SECONDS, SPEED_DT)
-        peak = float(np.max(np.abs(motion.speeds[joint.name][SPEED_SKIP_STEPS:]), initial=0.0))
+        speeds = np.abs(motion.speeds[joint.name])
+        early = float(np.max(speeds[:SPEED_SKIP_STEPS], initial=0.0))
+        peak = float(np.max(speeds[SPEED_SKIP_STEPS:], initial=0.0))
         inside = motion.finite and all(_inside(j, motion.positions[j.name], settings) for j in driven)
         ok = inside and peak <= joint.max_speed * (1 + SPEED_TOL)
         ok_all &= ok
         rows.append(
             f"{joint.name} {text.speed(joint, peak)} of {text.speed(joint, joint.max_speed, 'g')} "
-            f"{text.speed_unit(joint)}" + ("" if inside else ", a joint left its limits") + ("" if ok else " FAIL")
+            f"{text.speed_unit(joint)}"
+            + (
+                f" ({text.speed(joint, early)} in the first {SPEED_SKIP_STEPS} steps, which are not measured)"
+                if early > peak
+                else ""
+            )
+            + ("" if inside else ", a joint left its limits")
+            + ("" if ok else " FAIL")
         )
     return judge("SPEED", ok_all, "; ".join(rows))
 

@@ -113,3 +113,19 @@ def test_speed_fails_a_joint_over_its_limit_or_out_of_its_limits(arm):
     assert speed(engine_with(over=1.2), [hinge], [hinge], SETTINGS).detail == "arm_joint 108 of 90 deg/s FAIL"
     blown = speed(engine_with(end=-30.0), [hinge], [hinge], SETTINGS)
     assert blown.detail == "arm_joint 90 of 90 deg/s, a joint left its limits FAIL"
+
+
+def test_speed_says_when_the_move_ended_in_the_steps_it_does_not_measure(arm):
+    hinge = arm.joint("arm_joint")
+
+    class Short(IdealEngine):
+        """The joint moves at 2/3 of its limit for 3 steps and then stands."""
+
+        def move(self, targets, seconds, step):
+            steps = round(seconds / step)
+            speeds = {n: [hinge.max_speed * 2 / 3] * 3 + [0.0] * (steps - 3) for n in targets}
+            return Motion(speeds=speeds, positions=dict(targets), finite=True)
+
+    result = speed(engine_for(arm, Short), [hinge], [hinge], SETTINGS)
+    assert result.verdict == "PASS"
+    assert result.detail == "arm_joint 0 of 90 deg/s (60 in the first 5 steps, which are not measured)"

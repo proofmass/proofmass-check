@@ -269,6 +269,21 @@ class _Scene:
         self.world.reset()
         self.names = list(self.art.dof_names) if self.art is not None else []
         self.controller = self.art.get_articulation_controller() if self.art is not None else None
+        if self.art is not None:
+            self._reset_to_file_pose()
+
+    def _reset_to_file_pose(self) -> None:
+        """Make every reset put each joint at its rest position, as the file has it.
+
+        Isaac Sim 6.1 does not do this for every joint by itself: it resets a PhysX mimic follower
+        to 0, whatever its PhysicsJointStateAPI position is. A finger that jumps to 0 at a reset
+        can start inside the grip box and push it away before the test starts.
+        """
+        rest = {j.name: j.rest for j in self.asset.joints}
+        current = np.asarray(self.art.get_joint_positions(), float)
+        positions = np.array([rest.get(name, q) for name, q in zip(self.names, current, strict=True)])
+        self.art.set_joints_default_state(positions=positions)
+        self.world.reset()
 
     def _hold_base(self, lift: float) -> None:
         """A fixed joint that holds the root body lift (m) above its file pose. It assumes the body is not turned."""
