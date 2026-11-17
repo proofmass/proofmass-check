@@ -41,6 +41,11 @@ def arm(tmp_path):
 
 
 @pytest.fixture
+def actuated_arm(tmp_path):
+    return _read("actuated_arm", tmp_path)
+
+
+@pytest.fixture
 def tooled_arm(tmp_path):
     return _read("tooled_arm", tmp_path)
 

@@ -98,6 +98,30 @@ def arm(path: Path) -> Path:
     return path
 
 
+def actuator(stage, path, target, gain, bias, force=None, bias_type="affine") -> Usd.Prim:
+    """An MjcActuator on a joint: force = gain x control + bias[0] + bias[1] x position + bias[2] x speed."""
+    prim = stage.DefinePrim(path, "MjcActuator")
+    prim.CreateRelationship("mjc:target").SetTargets([target])
+    prim.CreateAttribute("mjc:gainType", Sdf.ValueTypeNames.Token, variability=Sdf.VariabilityUniform).Set("fixed")
+    prim.CreateAttribute("mjc:biasType", Sdf.ValueTypeNames.Token, variability=Sdf.VariabilityUniform).Set(bias_type)
+    # the schema's arrays hold 10 values, and Newton accepts no other length
+    prim.CreateAttribute("mjc:gainPrm", Sdf.ValueTypeNames.DoubleArray).Set([gain] + [0.0] * 9)
+    prim.CreateAttribute("mjc:biasPrm", Sdf.ValueTypeNames.DoubleArray).Set([*bias] + [0.0] * (10 - len(bias)))
+    if force is not None:
+        prim.CreateAttribute("mjc:forceRange:min", Sdf.ValueTypeNames.Double).Set(-force)
+        prim.CreateAttribute("mjc:forceRange:max", Sdf.ValueTypeNames.Double).Set(force)
+    return prim
+
+
+def actuated_arm(path: Path) -> Path:
+    """The arm with its drive as an MjcActuator and no PhysicsDriveAPI: 5730 N m/rad, 115 N m s/rad, at most 50 N m."""
+    stage = Usd.Stage.Open(str(arm(path)))
+    stage.GetPrimAtPath("/unit_arm/arm_joint").RemoveAPI(UsdPhysics.DriveAPI, "angular")
+    actuator(stage, "/unit_arm/arm_actuator", "/unit_arm/arm_joint", 5730.0, (0, -5730.0, -115.0), force=50.0)
+    stage.Save()
+    return path
+
+
 def tooled_arm(path: Path) -> Path:
     """The arm with a 0.1 kg tool fixed to its tip: a fixed joint after the last moving joint.
 

@@ -8,6 +8,13 @@ and the spec version.
 
 ## [Unreleased]
 
+### Added
+
+- The reader takes the drive of a joint from an `MjcActuator` when the joint has no
+  PhysicsDriveAPI, by the rule Newton uses (docs/spec.md, "Reading the asset"). A package whose
+  MuJoCo physics layer drives its joints only with actuators had "no position drive" before, and
+  HOLD, TRACK, LIMIT, STABLE and GRIP did not run on it in Newton.
+
 ## [0.1.2] - 2026-11-16
 
 ### Fixed
