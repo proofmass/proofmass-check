@@ -5,6 +5,9 @@
 Newton runs on NVIDIA Warp with the MuJoCo Warp solver, on the GPU. Runs of steps are captured as
 CUDA graphs, which makes a step several times faster.
 
+MuJoCo Warp holds constraints and contacts in buffers of a fixed size. They start at Newton's own
+sizes. When a measurement runs out of one, the engine doubles that buffer and runs it again.
+
 Not done yet:
 - SPEED: it needs a run at another physics step.
 - STAND, DRIVE, TURN, STEER: driving the wheels.
@@ -12,11 +15,13 @@ Not done yet:
   and we do not address them one by one yet. The run's notes list these joints.
 """
 
+import functools
 import math
 
 import newton
 import numpy as np
 import warp as wp
+from mujoco_warp import OverflowType
 from pxr import Usd
 
 from proofmass_check.checks import TITLES
@@ -29,9 +34,30 @@ STEP = 0.002  # s: 500 Hz, the MuJoCo Warp solver's step here
 CHUNK = 50  # steps in one CUDA graph. An even number, so the two states end in their first order.
 DEVICE = "cuda:0"
 
+# MuJoCo Warp's buffers, by the solver option that sizes them, with the overflow bits that say they ran out.
+BUFFERS = {
+    "njmax": OverflowType.NEFC | OverflowType.NJMAX_NNZ,  # constraint rows (Newton sizes njmax_nnz from njmax)
+    "nconmax": OverflowType.BROADPHASE | OverflowType.NARROWPHASE | OverflowType.CCD,  # contacts
+}
+FIRST_SIZES: dict[str, int] = {}  # empty: Newton's own sizes
+MAX_BUFFER = 8192  # a buffer this large does not grow again
+
 
 def create() -> "NewtonEngine":
     return NewtonEngine()
+
+
+def _repeated_while_a_buffer_runs_out(measure):
+    """A measurement starts from a reset, so it can run again: with a larger buffer, if it ran out of one."""
+
+    @functools.wraps(measure)
+    def repeated(self, *args, **kwargs):
+        result = measure(self, *args, **kwargs)
+        while self.sim.grow():
+            result = measure(self, *args, **kwargs)
+        return result
+
+    return repeated
 
 
 class NewtonEngine:
@@ -81,6 +107,7 @@ class NewtonEngine:
             not_addressable=tuple(not_addressable),
         )
 
+    @_repeated_while_a_buffer_runs_out
     def drop(self, height: float, seconds: float) -> DropOutcome:
         sim = self.sim
         sim.reset(lift=height)
@@ -95,6 +122,7 @@ class NewtonEngine:
         speed = float(np.linalg.norm(body_qd[sim.bodies[self.asset.root_body]][:3]))
         return DropOutcome(poses=poses, root_speed=speed, finite=bool(np.all(np.isfinite(body_q))))
 
+    @_repeated_while_a_buffer_runs_out
     def settle(self, targets, seconds) -> JointState:
         sim = self.sim
         sim.reset()
@@ -114,6 +142,7 @@ class NewtonEngine:
     def move(self, targets, seconds, step) -> Motion:
         raise NotImplementedError("the newton engine does not run SPEED yet")
 
+    @_repeated_while_a_buffer_runs_out
     def push(self, joint: str, effort: float, seconds: float) -> float:
         sim = self.sim
         sim.reset()
@@ -153,8 +182,8 @@ class _Sim:
         self.model = model = builder.finalize(device=DEVICE)
         # One contact per finger lets the box sink in and turn. Newton's default is 1 contact per pair,
         # MuJoCo's own default is 4, and multiccd gives several.
-        options = {"cone": "elliptic", "impratio": 10.0, "enable_multiccd": True} if box else {}
-        self.solver = newton.solvers.SolverMuJoCo(model, **options)
+        self.options = {"cone": "elliptic", "impratio": 10.0, "enable_multiccd": True} if box else {}
+        self._new_solver(FIRST_SIZES)
         self.control = model.control()
         self.target0 = model.joint_target_q.numpy().copy()
         names = [label.rsplit("/", 1)[-1] for label in model.joint_label]
@@ -165,7 +194,25 @@ class _Sim:
         self.bodies = dict(info["path_body_map"])  # USD path: body index
         self.init = model.state()
         self.s0, self.s1 = model.state(), model.state()
-        self.graph = None
+
+    def _new_solver(self, sizes):
+        self.solver = newton.solvers.SolverMuJoCo(self.model, **self.options, **sizes)
+        self.graph = None  # a graph runs the solver it was recorded with
+
+    def grow(self) -> bool:
+        """After a measurement: a new solver with twice each buffer that ran out. False when none ran out, or one
+        that ran out is already MAX_BUFFER.
+        """
+        data = self.solver.mjw_data
+        overflow = int(np.bitwise_or.reduce(data.overflow.numpy()))
+        sizes = {"njmax": int(data.njmax), "nconmax": int(data.naconmax)}  # one world, so naconmax is nconmax
+        ran_out = [name for name, bits in BUFFERS.items() if overflow & bits]
+        if not ran_out or any(sizes[name] >= MAX_BUFFER for name in ran_out):
+            return False
+        for name in ran_out:
+            sizes[name] *= 2
+        self._new_solver(sizes)
+        return True
 
     def _step(self):
         self.solver.step(self.s0, self.s1, self.control, None, STEP)
@@ -175,6 +222,11 @@ class _Sim:
         """The initial state, with every free joint lifted by lift (m)."""
         self.s0.assign(self.init)
         self.s1.assign(self.init)
+        # MuJoCo Warp keeps some data from one step to the next, such as the accelerations that the next
+        # step starts from. After a run that ended in NaN, that data is NaN too, and every later run would
+        # end in NaN. The solver's reset clears that data. NONE: it leaves our states as they are.
+        self.solver.reset(self.s0, flags=newton.StateFlags.NONE)
+        self.solver.mjw_data.overflow.zero_()  # MuJoCo Warp only sets its overflow bits; grow() reads them
         if lift:
             q = self.s0.joint_q.numpy()
             for name in self.free:
@@ -188,12 +240,11 @@ class _Sim:
 
     def run(self, seconds: float):
         n = 2 * round(seconds / STEP / 2)
-        if self.graph is None:
+        if self.graph is None:  # capturing records the steps but does not run them
             with wp.ScopedCapture() as capture:
                 for _ in range(CHUNK):
                     self._step()
             self.graph = capture.graph
-            n -= CHUNK  # capturing the graph also ran its steps
         for _ in range(n // CHUNK):
             wp.capture_launch(self.graph)
         for _ in range(n % CHUNK):
@@ -267,6 +318,7 @@ class NewtonGrip:
         self.sim.s0.body_f.assign(force)
         self.sim.s1.body_f.assign(force)
 
+    @_repeated_while_a_buffer_runs_out
     def trial(self, mass: float, direction, shake: bool) -> GripOutcome:
         sim, setup = self.sim, self.setup
         self._set_mass(mass)
