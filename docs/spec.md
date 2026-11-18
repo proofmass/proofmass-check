@@ -49,6 +49,12 @@ The reader never repairs the asset. It reads the USD as an engine would:
 - A generic (D6) joint becomes one joint per free axis, as in PhysX. An axis whose low limit is
   above its high limit is locked.
 - A mimic joint (PhysX, MuJoCo or Newton schema) follows its leader. PASSIVE does not push it.
+- A joint's drive is its PhysicsDriveAPI. A joint without one, and with one axis, can get its
+  drive from an active `MjcActuator` that targets it, as in Newton. The actuator must have the
+  shape of MuJoCo's `<position>` or `<velocity>` shortcut: gain type `fixed`, bias type `affine`,
+  no dynamics, gear 1, and with gain kp a bias of (0, -kp, -kv) for a position drive or
+  (0, 0, -kp) for a velocity drive. Any other actuator is a motor that the user commands, and is
+  not a drive. PhysX does not read an `MjcActuator`.
 
 Missing data is not a failure of a check. A check that needs it reports `N/A`.
 

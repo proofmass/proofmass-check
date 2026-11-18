@@ -25,6 +25,34 @@ def test_the_arm_in_si_units(arm):
     assert arm.world_fixed == ("root_joint",) and arm.root_body == "/unit_arm/base"
 
 
+def test_an_mjc_actuator_is_the_drive_of_a_joint_without_one(actuated_arm, tmp_path):
+    drive = actuated_arm.joint("arm_joint").drive
+    assert (drive.stiffness, drive.damping, drive.max_force) == (5730.0, 115.0, 50.0)  # MuJoCo gives it per radian
+    assert drive.kind == "position"
+
+    def drive_with(name, change):
+        stage = Usd.Stage.Open(str(usd_assets.actuated_arm(tmp_path / f"{name}.usda")))
+        change(stage, stage.GetPrimAtPath("/unit_arm/arm_actuator"))
+        stage.Save()
+        return read_asset(tmp_path / f"{name}.usda").joint("arm_joint").drive
+
+    velocity = drive_with("velocity", lambda stage, prim: prim.GetAttribute("mjc:biasPrm").Set([0, 0, -5730.0]))
+    assert (velocity.stiffness, velocity.damping, velocity.kind) == (0.0, 5730.0, "velocity")
+    # a motor, an actuator with dynamics and one that is not active are not drives
+    assert drive_with("motor", lambda stage, prim: prim.GetAttribute("mjc:biasType").Set("none")) is None
+    assert drive_with("spring", lambda stage, prim: prim.GetAttribute("mjc:biasPrm").Set([0, -100.0, 0])) is None
+    filtered = drive_with(
+        "filtered", lambda stage, prim: prim.CreateAttribute("mjc:dynType", Sdf.ValueTypeNames.Token).Set("filter")
+    )
+    assert filtered is None
+    assert drive_with("inactive", lambda stage, prim: prim.SetActive(False)) is None
+    # PhysicsDriveAPI comes first
+    both = drive_with(
+        "both", lambda stage, prim: usd_assets.drive(stage.GetPrimAtPath("/unit_arm/arm_joint"), "angular", 100.0, 2.0)
+    )
+    assert both.stiffness == pytest.approx(100.0 * 180 / math.pi)
+
+
 def test_the_gripper_site(gripper):
     (site,) = gripper.sites
     assert site.body == "/unit_gripper/hand"

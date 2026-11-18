@@ -10,6 +10,7 @@ The reader must work on packages from any maker. So:
 - Polygons are split into triangles. A box collider (UsdGeom.Cube) becomes its 8 corners.
 - A mass the USD leaves to the engine reads as None.
 - A generic (D6) joint becomes one Joint per free axis, as in PhysX.
+- A joint without PhysicsDriveAPI can get its drive from an MjcActuator, as in Newton.
 
 Import this module only after the engine has started. In Isaac Sim, pxr cannot be imported before.
 """
@@ -96,10 +97,11 @@ def read_asset(file: str | Path, variants: Mapping[str, str] | None = None) -> A
             bodies[body.path] = body
     if not bodies:
         raise AssetError(f"{Path(file).name} has no rigid body (PhysicsRigidBodyAPI) with these variants: {variants}")
+    actuators = _read_actuators(prims)
     joints = []
     for prim in prims:
         if prim.IsA(UsdPhysics.Joint):
-            joints += _read_joint(prim, stage, cache, bodies)
+            joints += _read_joint(prim, stage, cache, bodies, actuators.get(prim.GetPath()))
     return Asset(
         file=str(file),
         name=default_prim.GetName(),
@@ -243,8 +245,57 @@ class _Dof:
     d6: str | None = None
 
 
-def _read_joint(prim: Usd.Prim, stage: Usd.Stage, cache: UsdGeom.XformCache, bodies) -> list[Joint]:
-    """One Joint, or one per free axis of a D6 joint. A disabled joint gives none."""
+def _read_actuators(prims: Iterable[Usd.Prim]) -> dict:
+    """The drive each MjcActuator gives, by the path of the joint it targets.
+
+    Newton turns an actuator into a joint drive when it has the shape of MuJoCo's <position> or
+    <velocity> shortcut, and so does the reader. Such an actuator has gain type "fixed", bias type
+    "affine", no dynamics and gear 1. With gain kp and bias (b0, b1, b2):
+
+    - position: b0 = 0, b1 = -kp, b2 <= 0. The stiffness is kp, the damping is -b2.
+    - velocity: b0 = 0, b1 = 0, b2 = -kp. The damping is kp.
+
+    Any other actuator is a motor that the user commands directly. It is not a drive. MuJoCo's
+    values are per radian, as the Drive class is.
+    """
+    drives = {}
+    for prim in prims:
+        if prim.GetTypeName() != usd_names.MJC_ACTUATOR:
+            continue
+        targets = prim.GetRelationship(usd_names.MJC_ACTUATOR_TARGET).GetTargets()
+        gear = list(_value(prim, usd_names.MJC_ACTUATOR_GEAR, (1.0,)))
+        if (
+            len(targets) != 1
+            or _value(prim, usd_names.MJC_ACTUATOR_GAIN_TYPE, "fixed") != "fixed"
+            or _value(prim, usd_names.MJC_ACTUATOR_BIAS_TYPE, "none") != "affine"
+            or _value(prim, usd_names.MJC_ACTUATOR_DYN_TYPE, "none") != "none"
+            or not math.isclose(gear[0], 1.0)
+            or any(gear[1:])
+        ):
+            continue
+        kp = float([*_value(prim, usd_names.MJC_ACTUATOR_GAIN, ()), 1.0][0])  # MuJoCo's default gain is 1
+        b0, b1, b2 = [*_value(prim, usd_names.MJC_ACTUATOR_BIAS, ()), 0.0, 0.0, 0.0][:3]
+        if kp <= 0 or not math.isclose(b0, 0.0, abs_tol=1e-9):
+            continue
+        if math.isclose(b1, -kp) and b2 <= 0:
+            stiffness, damping = kp, -float(b2)
+        elif math.isclose(b1, 0.0, abs_tol=1e-9) and math.isclose(b2, -kp):
+            stiffness, damping = 0.0, kp
+        else:
+            continue
+        low = _value(prim, usd_names.MJC_ACTUATOR_FORCE_MIN)
+        high = _value(prim, usd_names.MJC_ACTUATOR_FORCE_MAX)
+        limited = low is not None and high is not None and low < high
+        drives[targets[0]] = Drive(stiffness, damping, max(abs(low), abs(high)) if limited else None)
+    return drives
+
+
+def _read_joint(prim: Usd.Prim, stage: Usd.Stage, cache: UsdGeom.XformCache, bodies, actuator=None) -> list[Joint]:
+    """One Joint, or one per free axis of a D6 joint. A disabled joint gives none.
+
+    actuator: the drive an MjcActuator gives this joint. A joint with one axis uses it when it has
+    no PhysicsDriveAPI.
+    """
     api = UsdPhysics.Joint(prim)
     if api.GetJointEnabledAttr().Get() is False:
         return []
@@ -270,7 +321,7 @@ def _read_joint(prim: Usd.Prim, stage: Usd.Stage, cache: UsdGeom.XformCache, bod
     # The joint's position and axis in the world come from body1's side, or from body0's side when
     # body1 is the world.
     frame = side1 if side1.body else side0
-    return [_dof_joint(prim, dof, frame, common) for dof in dofs]
+    return [_dof_joint(prim, dof, frame, common, actuator if len(dofs) == 1 else None) for dof in dofs]
 
 
 def _side(stage, cache, bodies, rel, pos_attr, rot_attr) -> _Side:
@@ -335,10 +386,10 @@ def _d6_dofs(prim: Usd.Prim) -> list[_Dof]:
     ]
 
 
-def _dof_joint(prim: Usd.Prim, dof: _Dof, frame: _Side, common: dict) -> Joint:
+def _dof_joint(prim: Usd.Prim, dof: _Dof, frame: _Side, common: dict, actuator: Drive | None) -> Joint:
     """A revolute or prismatic Joint in SI units."""
     to_si = math.pi / 180 if dof.kind == "revolute" else 1.0  # the USD gives angles in degrees
-    drive = None
+    drive = actuator
     if prim.HasAPI(UsdPhysics.DriveAPI, dof.attribute_axis):
         api = UsdPhysics.DriveAPI(prim, dof.attribute_axis)
         drive = Drive(

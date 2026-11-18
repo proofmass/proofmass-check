@@ -24,6 +24,19 @@ PHYSX_MIMIC_GEARING = ":gearing"
 MJC_MIMIC_TARGET = "mjc:target"
 MJC_MIMIC_COEF = "mjc:coef1"
 
+# MuJoCo schema (MjcActuator prim): the joint it acts on, and MuJoCo's general actuator model.
+# The force is gainPrm[0] x control + biasPrm[0] + biasPrm[1] x position + biasPrm[2] x speed.
+MJC_ACTUATOR = "MjcActuator"
+MJC_ACTUATOR_TARGET = "mjc:target"
+MJC_ACTUATOR_GAIN_TYPE = "mjc:gainType"
+MJC_ACTUATOR_BIAS_TYPE = "mjc:biasType"
+MJC_ACTUATOR_DYN_TYPE = "mjc:dynType"
+MJC_ACTUATOR_GEAR = "mjc:gear"
+MJC_ACTUATOR_GAIN = "mjc:gainPrm"
+MJC_ACTUATOR_BIAS = "mjc:biasPrm"
+MJC_ACTUATOR_FORCE_MIN = "mjc:forceRange:min"  # N, or N m
+MJC_ACTUATOR_FORCE_MAX = "mjc:forceRange:max"
+
 # Newton schema (NewtonMimicAPI): follower = coef1 x leader, unless mimicEnabled is false.
 NEWTON_MIMIC_JOINT = "newton:mimicJoint"
 NEWTON_MIMIC_COEF = "newton:mimicCoef1"
