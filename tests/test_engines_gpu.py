@@ -8,6 +8,8 @@ These tests need the engine's Python environment with pytest in it, and a GPU fo
     pytest tests/test_engines_gpu.py -m gpu --engine newton
 """
 
+import math
+
 import pytest
 
 pytestmark = pytest.mark.gpu
@@ -79,3 +81,46 @@ def test_a_reset_puts_a_mimic_follower_at_its_rest_position(engine, mimic_grippe
     after_reset = engine.settle({"finger_r_joint": -0.01}, seconds=0.0)
     assert after_reset.positions["finger_l_joint"] == pytest.approx(0.01, abs=1e-5)
     assert after_reset.positions["finger_r_joint"] == pytest.approx(-0.01, abs=1e-5)
+
+
+def test_the_first_run_is_as_long_as_the_next(engine, arm):
+    """The Newton engine records its steps as a CUDA graph in the first run. Recording does not run them."""
+    if engine.name != "newton":
+        pytest.skip("the fault was in the Newton engine")
+    engine.open(arm, floor=None)
+    first = engine.settle({"arm_joint": 0.2}, seconds=0.1)
+    second = engine.settle({"arm_joint": 0.2}, seconds=0.1)
+    assert first.positions["arm_joint"] > 0.1
+    assert first.positions == pytest.approx(second.positions, abs=1e-6)
+
+
+def test_a_run_that_ends_in_nan_does_not_spoil_the_next_run(engine, arm):
+    """Newton's solver keeps some data from step to step. When a contact or a limit acts in the first step, the
+    solver starts from that data, so a reset must clear it. Here the floor cuts through the bar: contacts act
+    from the first step.
+    """
+    if engine.name != "newton":
+        pytest.skip("the fault was in the Newton engine")
+    engine.open(arm, floor=0.25)
+    before = engine.settle({"arm_joint": 0.0}, seconds=0.2)
+    assert math.isnan(engine.push("arm_joint", math.inf, seconds=0.1))  # an infinite effort ends in NaN
+    after = engine.settle({"arm_joint": 0.0}, seconds=0.2)
+    assert before.finite and after.finite
+    assert after.positions == pytest.approx(before.positions, abs=1e-6)
+
+
+def test_a_measurement_that_runs_out_of_a_solver_buffer_runs_again_with_a_larger_one(engine, arm, monkeypatch):
+    """MuJoCo Warp leaves out the contacts and constraints that do not fit in its buffers. With buffers this small,
+    and no larger ones, the bar would go through the floor to 0.3 rad.
+    """
+    if engine.name != "newton":
+        pytest.skip("the buffers are MuJoCo Warp's")
+    from proofmass_check.engines import newton as newton_engine
+
+    engine.open(arm, floor=0.2)  # just under the bar
+    newton_sizes = engine.settle({"arm_joint": 0.3}, seconds=0.5)  # drives the bar down onto the floor
+    monkeypatch.setattr(newton_engine, "FIRST_SIZES", {"njmax": 4, "nconmax": 4})  # the move needs 24 and 16
+    engine.open(arm, floor=0.2)
+    small_sizes = engine.settle({"arm_joint": 0.3}, seconds=0.5)
+    assert newton_sizes.positions["arm_joint"] < 0.1  # the floor stops the bar
+    assert small_sizes.positions == pytest.approx(newton_sizes.positions, abs=1e-6)

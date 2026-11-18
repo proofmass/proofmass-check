@@ -8,6 +8,20 @@ and the spec version.
 
 ## [Unreleased]
 
+### Fixed
+
+- Newton: one move that ended in NaN no longer gives NaN in every move after it. The MuJoCo Warp
+  solver keeps some data from step to step, and the engine's reset did not clear it. On AgiBot's
+  G2, LIMIT and PASSIVE gave NaN for every joint after one TRACK move that ended in NaN.
+- Newton: the first move of a run (DROP or HOLD) and the first load of GRIP at each grip site now
+  last as long as the spec says. The engine records its steps as a CUDA graph the first time it
+  runs them, and it counted the recorded steps as steps that had run. Recording does not run them,
+  so that move was 50 steps (0.1 s) short. Results of DROP, HOLD and GRIP can change a little.
+- Newton: a measurement that runs out of MuJoCo Warp's buffer for constraints or for contacts now
+  runs again with that buffer twice as large. The buffers start at Newton's own sizes, which can be
+  too small for a large robot (64 constraint rows and 48 contacts on AgiBot's G2), and MuJoCo Warp
+  leaves out what does not fit. On G2, two TRACK moves of the arms ended in NaN for that reason.
+
 ## [0.1.2] - 2026-11-16
 
 ### Fixed
