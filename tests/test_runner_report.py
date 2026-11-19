@@ -41,6 +41,19 @@ def test_other_checks_wait_for_load(arm):
     assert run.results[2].detail == "the engine did not build the asset as the USD describes it (LOAD)"
 
 
+def test_only_an_engine_that_reads_mjc_actuators_drives_a_joint_with_one(actuated_arm):
+    class ReadsMjcActuators(IdealEngine):
+        reads_mjc_actuators = True
+
+    def verdicts(engine):
+        return {r.id: r.verdict for r in run_checks(engine, actuated_arm, Settings()).results}
+
+    physx, newton = verdicts(IdealEngine()), verdicts(ReadsMjcActuators())
+    assert (physx["HOLD"], physx["TRACK"], physx["PASSIVE"]) == ("N/A", "N/A", "PASS")
+    assert (newton["HOLD"], newton["TRACK"], newton["PASSIVE"]) == ("PASS", "PASS", "N/A")
+    assert actuated_arm.joint("arm_joint").drive is None  # the run does not change the asset it was given
+
+
 def test_settings_that_differ_from_the_spec_are_noted(prop):
     run = run_checks(IdealEngine(), prop, Settings(settle_s=4.0))
     assert run.notes == ("settings differ from the spec: settle_s is 4.0 (spec: 1.5)",)

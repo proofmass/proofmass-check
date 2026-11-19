@@ -25,8 +25,11 @@ def test_the_arm_in_si_units(arm):
     assert arm.world_fixed == ("root_joint",) and arm.root_body == "/unit_arm/base"
 
 
-def test_an_mjc_actuator_is_the_drive_of_a_joint_without_one(actuated_arm, tmp_path):
-    drive = actuated_arm.joint("arm_joint").drive
+def test_an_mjc_actuator_is_the_drive_of_a_joint_without_one_for_newton(actuated_arm, tmp_path):
+    joint = actuated_arm.joint("arm_joint")
+    assert joint.drive is None  # it has no PhysicsDriveAPI, so PhysX sees no drive
+    drive = actuated_arm.with_mjc_drives().joint("arm_joint").drive
+    assert drive == joint.mjc_drive
     assert (drive.stiffness, drive.damping, drive.max_force) == (5730.0, 115.0, 50.0)  # MuJoCo gives it per radian
     assert drive.kind == "position"
 
@@ -34,7 +37,7 @@ def test_an_mjc_actuator_is_the_drive_of_a_joint_without_one(actuated_arm, tmp_p
         stage = Usd.Stage.Open(str(usd_assets.actuated_arm(tmp_path / f"{name}.usda")))
         change(stage, stage.GetPrimAtPath("/unit_arm/arm_actuator"))
         stage.Save()
-        return read_asset(tmp_path / f"{name}.usda").joint("arm_joint").drive
+        return read_asset(tmp_path / f"{name}.usda").with_mjc_drives().joint("arm_joint").drive
 
     velocity = drive_with("velocity", lambda stage, prim: prim.GetAttribute("mjc:biasPrm").Set([0, 0, -5730.0]))
     assert (velocity.stiffness, velocity.damping, velocity.kind) == (0.0, 5730.0, "velocity")

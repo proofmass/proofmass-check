@@ -63,6 +63,7 @@ def _repeated_while_a_buffer_runs_out(measure):
 class NewtonEngine:
     name = "newton"
     variant_sets = ("Newton", "MuJoCo")
+    reads_mjc_actuators = True  # Newton's importer turns an MjcActuator into a joint drive
 
     def __init__(self):
         self.asset: Asset | None = None

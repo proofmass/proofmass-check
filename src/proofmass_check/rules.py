@@ -11,7 +11,7 @@ Values are in SI units (m, kg, s, N) unless the name says otherwise.
 import math
 from dataclasses import dataclass
 
-SPEC_VERSION = "0.2"
+SPEC_VERSION = "0.3"
 SEED = 0  # every random choice uses numpy.random.default_rng(SEED)
 GRAVITY = 9.81  # m/s2, along -Z
 

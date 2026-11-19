@@ -66,6 +66,7 @@ def create() -> "PhysxEngine":
 class PhysxEngine:
     name = "physx"
     variant_sets = ("PhysX",)
+    reads_mjc_actuators = False  # Isaac Sim does not read MjcActuator
 
     def __init__(self):
         apps = (Path(isaacsim.__file__).parent / "apps").as_posix()
