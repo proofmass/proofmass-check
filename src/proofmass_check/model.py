@@ -11,7 +11,7 @@ Transforms are 4x4 numpy arrays for column vectors: a point p goes to `m[:3, :3]
 
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
 import numpy as np
@@ -114,7 +114,8 @@ class Joint:
     upper: float = math.inf
     rest: float = 0.0  # PhysicsJointStateAPI position, else 0
     max_speed: float = math.inf  # rad/s or m/s
-    drive: Drive | None = None
+    drive: Drive | None = None  # its PhysicsDriveAPI
+    mjc_drive: Drive | None = None  # the drive its MjcActuator gives, for an engine that reads one
     mimic: Mimic | None = None
     d6: str | None = None
 
@@ -213,6 +214,15 @@ class Asset:
 
     def joint(self, name: str) -> Joint:
         return self._by_name[name]
+
+    def with_mjc_drives(self) -> "Asset":
+        """The asset as an engine that reads MjcActuator builds it (Newton).
+
+        A joint without PhysicsDriveAPI takes the drive of its MjcActuator. PhysX reads no
+        MjcActuator, so there the joint has no drive.
+        """
+        joints = tuple(replace(j, drive=j.mjc_drive) if j.drive is None and j.mjc_drive else j for j in self.joints)
+        return replace(self, joints=joints)
 
     @property
     def world_fixed(self) -> tuple[str, ...]:

@@ -8,13 +8,23 @@ and the spec version.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-18
+
+The checks follow docs/spec.md, version 0.3.
+
 ### Added
 
-- The reader takes the drive of a joint from an `MjcActuator` when the joint has no
-  PhysicsDriveAPI, by the rule Newton uses (docs/spec.md, "Reading the asset"). A package whose
-  MuJoCo physics layer drives its joints only with actuators had "no position drive" before, and
-  HOLD, TRACK, LIMIT, STABLE and GRIP did not run on it in Newton.
-  
+- Newton: a joint without PhysicsDriveAPI takes its drive from an `MjcActuator`, by the rule
+  Newton uses (docs/spec.md, "Reading the asset"). A package whose MuJoCo physics layer drives its
+  joints only with actuators had "no position drive" before, and HOLD, TRACK, LIMIT, STABLE and
+  GRIP did not run on it in Newton. PhysX does not read an `MjcActuator`, so in PhysX such a joint
+  still has no drive.
+
+### Changed
+
+- An engine says whether it reads `MjcActuator`: `reads_mjc_actuators` in the `Engine` protocol.
+  An engine outside this package needs it too.
+
 ### Fixed
 
 - Newton: one move that ended in NaN no longer gives NaN in every move after it. The MuJoCo Warp
@@ -69,7 +79,8 @@ The first release. The checks follow docs/spec.md, version 0.2.
 - The `proofmass-check` command: `run` and `list-checks`.
 - Engines: PhysX in Isaac Sim 6.1, and Newton as an experiment.
 
-[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/proofmass/proofmass-check/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/proofmass/proofmass-check/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/proofmass/proofmass-check/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/proofmass/proofmass-check/releases/tag/v0.1.0

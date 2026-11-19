@@ -1,6 +1,7 @@
 # proofmass-check specification
 
-Version 0.2 (draft). Version 0.2 adds wheeled robots (section 4.2).
+Version 0.3 (draft). Version 0.3 reads the drive of a joint from an `MjcActuator` in Newton
+(section 2). Version 0.2 added wheeled robots (section 4.2).
 
 This file says what every check does and which numbers it uses. The code follows this file:
 `src/proofmass_check/rules.py` holds the same numbers, and a unit test fails when the two differ.
@@ -49,12 +50,12 @@ The reader never repairs the asset. It reads the USD as an engine would:
 - A generic (D6) joint becomes one joint per free axis, as in PhysX. An axis whose low limit is
   above its high limit is locked.
 - A mimic joint (PhysX, MuJoCo or Newton schema) follows its leader. PASSIVE does not push it.
-- A joint's drive is its PhysicsDriveAPI. A joint without one, and with one axis, can get its
-  drive from an active `MjcActuator` that targets it, as in Newton. The actuator must have the
-  shape of MuJoCo's `<position>` or `<velocity>` shortcut: gain type `fixed`, bias type `affine`,
-  no dynamics, gear 1, and with gain kp a bias of (0, -kp, -kv) for a position drive or
-  (0, 0, -kp) for a velocity drive. Any other actuator is a motor that the user commands, and is
-  not a drive. PhysX does not read an `MjcActuator`.
+- A joint's drive is its PhysicsDriveAPI. In Newton, a joint without one, and with one axis, gets
+  its drive from an active `MjcActuator` that targets it, as Newton's importer does. The actuator
+  must have the shape of MuJoCo's `<position>` or `<velocity>` shortcut: gain type `fixed`, bias
+  type `affine`, no dynamics, gear 1, and with gain kp a bias of (0, -kp, -kv) for a position
+  drive or (0, 0, -kp) for a velocity drive. Any other actuator is a motor that the user commands,
+  and is not a drive. PhysX does not read an `MjcActuator`, so in PhysX such a joint has no drive.
 
 Missing data is not a failure of a check. A check that needs it reports `N/A`.
 

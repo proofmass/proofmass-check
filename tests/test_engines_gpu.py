@@ -55,12 +55,16 @@ def test_an_arm_follows_its_drive(engine, arm):
     expect(results, "SPEED", "PASS" if "SPEED" in engine.supported else "N/A")
 
 
-def test_newton_drives_a_joint_from_its_mjc_actuator(engine, actuated_arm):
-    if engine.name != "newton":
-        pytest.skip("PhysX does not read an MjcActuator")
+def test_only_newton_drives_a_joint_from_its_mjc_actuator(engine, actuated_arm):
     results = verdicts(engine, actuated_arm)
-    for check_id in ("LOAD", "HOLD", "TRACK", "LIMIT", "STABLE"):
-        expect(results, check_id)
+    expect(results, "LOAD")
+    if engine.reads_mjc_actuators:
+        for check_id in ("HOLD", "TRACK", "LIMIT", "STABLE"):
+            expect(results, check_id)
+    else:  # PhysX: the joint has no drive, so it swings freely, as a door does
+        for check_id in ("HOLD", "TRACK", "LIMIT", "STABLE", "SPEED"):
+            expect(results, check_id, "N/A")
+        expect(results, "PASSIVE")
 
 
 def test_a_fixed_joint_after_the_last_moving_joint(engine, tooled_arm):

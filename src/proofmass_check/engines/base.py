@@ -116,6 +116,7 @@ class Engine(Protocol):
     name: str  # as on the command line: "physx", "newton"
     variant_sets: tuple[str, ...]  # the asset's variant sets this engine reads, preferred first
     supported: frozenset[str]  # the check IDs this engine can run
+    reads_mjc_actuators: bool  # a joint without PhysicsDriveAPI takes the drive of its MjcActuator
 
     def version(self) -> Mapping[str, str]:
         """The versions that affect results, for example {"isaacsim": "6.1.0"}."""

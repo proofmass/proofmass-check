@@ -40,6 +40,8 @@ class Run:
 def run_checks(engine: Engine, asset: Asset, settings: Settings) -> Run:
     """Run every check in the order of TITLES. The engine must be started and not yet opened."""
     start = time.monotonic()
+    if engine.reads_mjc_actuators:
+        asset = asset.with_mjc_drives()
     floor = floor_height(asset.bodies.values()) if settings.floor else None
     engine.open(asset, floor, BASE_LIFT if asset.wheeled else None)
     outcome = engine.load()

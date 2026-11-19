@@ -10,7 +10,7 @@ The reader must work on packages from any maker. So:
 - Polygons are split into triangles. A box collider (UsdGeom.Cube) becomes its 8 corners.
 - A mass the USD leaves to the engine reads as None.
 - A generic (D6) joint becomes one Joint per free axis, as in PhysX.
-- A joint without PhysicsDriveAPI can get its drive from an MjcActuator, as in Newton.
+- The drive an MjcActuator gives a joint is kept apart from its PhysicsDriveAPI: only Newton reads it.
 
 Import this module only after the engine has started. In Isaac Sim, pxr cannot be imported before.
 """
@@ -293,8 +293,7 @@ def _read_actuators(prims: Iterable[Usd.Prim]) -> dict:
 def _read_joint(prim: Usd.Prim, stage: Usd.Stage, cache: UsdGeom.XformCache, bodies, actuator=None) -> list[Joint]:
     """One Joint, or one per free axis of a D6 joint. A disabled joint gives none.
 
-    actuator: the drive an MjcActuator gives this joint. A joint with one axis uses it when it has
-    no PhysicsDriveAPI.
+    actuator: the drive an MjcActuator gives this joint. A joint with one axis keeps it as mjc_drive.
     """
     api = UsdPhysics.Joint(prim)
     if api.GetJointEnabledAttr().Get() is False:
@@ -389,7 +388,7 @@ def _d6_dofs(prim: Usd.Prim) -> list[_Dof]:
 def _dof_joint(prim: Usd.Prim, dof: _Dof, frame: _Side, common: dict, actuator: Drive | None) -> Joint:
     """A revolute or prismatic Joint in SI units."""
     to_si = math.pi / 180 if dof.kind == "revolute" else 1.0  # the USD gives angles in degrees
-    drive = actuator
+    drive = None
     if prim.HasAPI(UsdPhysics.DriveAPI, dof.attribute_axis):
         api = UsdPhysics.DriveAPI(prim, dof.attribute_axis)
         drive = Drive(
@@ -410,6 +409,7 @@ def _dof_joint(prim: Usd.Prim, dof: _Dof, frame: _Side, common: dict, actuator: 
         rest=float(rest) * to_si,
         max_speed=float(_value(prim, usd_names.PHYSX_MAX_JOINT_VELOCITY, math.inf)) * to_si,
         drive=drive,
+        mjc_drive=actuator,
         d6=dof.d6,
         **common,
     )

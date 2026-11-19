@@ -19,6 +19,7 @@ from proofmass_check.geometry import lowest_collider
 class IdealEngine:
     name = "fake"
     variant_sets = ("PhysX",)
+    reads_mjc_actuators = False
     supported = frozenset(TITLES)
 
     def __init__(self):
