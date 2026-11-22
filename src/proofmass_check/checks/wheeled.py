@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from proofmass_check import rules
-from proofmass_check.checks import CheckResult, judge
+from proofmass_check.checks import CheckResult, Measurement, judge
 from proofmass_check.engines.base import BaseTrace, Engine
 from proofmass_check.model import Asset, WheeledBase
 
@@ -89,17 +89,24 @@ def axle_path(asset: Asset, trace: BaseTrace) -> np.ndarray:
     return np.array(rows, float)
 
 
-def evaluate(base: WheeledBase, check_id: str, sent: Commands, path: np.ndarray) -> tuple[bool, str]:
+def evaluate(base: WheeledBase, check_id: str, sent: Commands, path: np.ndarray) -> tuple[bool, str, list]:
+    """The verdict, the detail text and the measurements of one wheeled check.
+
+    The verdict is True when every measurement is ok. A path that is not finite has no measurements.
+    """
     if not np.all(np.isfinite(path)):
-        return False, "the simulation became unstable (NaN)"
+        return False, "the simulation became unstable (NaN)", []
     t, x, y, yaw, tilt = path[:, 0], path[:, 1], path[:, 2], np.unwrap(path[:, 3]), path[:, 4]
     after = t >= min(rules.STARTUP_S, rules.STARTUP_FRACTION * t[-1])  # after the start-up
     span = t[after][-1] - t[after][0]
     if check_id == "STAND":
         speed = math.hypot(x[-1] - x[-2], y[-1] - y[-2]) / (t[-1] - t[-2])
         tilt_deg = math.degrees(tilt[-1])
-        ok = tilt_deg < rules.STAND_TILT_DEG and speed < rules.STAND_SPEED
-        return ok, f"tilt {tilt_deg:.2f} deg, speed {speed * 1000:.1f} mm/s after the drop"
+        found = [
+            _asset("tilt", tilt[-1], math.radians(rules.STAND_TILT_DEG), "rad", tilt_deg < rules.STAND_TILT_DEG),
+            _asset("speed", speed, rules.STAND_SPEED, "m/s", speed < rules.STAND_SPEED),
+        ]
+        return _all_ok(found), f"tilt {tilt_deg:.2f} deg, speed {speed * 1000:.1f} mm/s after the drop", found
     if check_id == "DRIVE":
         dx, dy = x[after][-1] - x[after][0], y[after][-1] - y[after][0]
         speed = math.hypot(dx, dy) / span
@@ -108,15 +115,20 @@ def evaluate(base: WheeledBase, check_id: str, sent: Commands, path: np.ndarray)
             f"speed {speed:.3f} m/s (commanded {sent.speed:.3f}), sideways drift {abs(dy) * 1000:.0f} mm "
             f"over {abs(dx):.2f} m, heading change {turn:.1f} deg"
         )
-        if dx <= 0 or abs(dy) > abs(dx):
+        forward = dx > 0 and abs(dy) <= abs(dx)
+        error, allowed = abs(speed - sent.speed), rules.DRIVE_SPEED_TOL * sent.speed
+        drift, most_drift = abs(dy), rules.DRIVE_DRIFT_TOL * abs(dx)
+        found = [
+            _asset("distance along +X", dx, 0.0, "m", forward, "min"),
+            _asset("speed error", error, allowed, "m/s", error <= allowed),
+            _asset("sideways drift", drift, most_drift, "m", drift <= most_drift),
+            _asset("heading change", math.radians(turn), math.radians(rules.DRIVE_YAW_TOL_DEG), "rad",
+                   turn <= rules.DRIVE_YAW_TOL_DEG),
+        ]  # fmt: skip
+        if not forward:
             side = "-X" if abs(dx) >= abs(dy) else ("+Y" if dy > 0 else "-Y")
-            return False, detail + f"; the robot drove toward {side}: turn the model so its front faces +X"
-        ok = (
-            abs(speed - sent.speed) <= rules.DRIVE_SPEED_TOL * sent.speed
-            and abs(dy) <= rules.DRIVE_DRIFT_TOL * abs(dx)
-            and turn <= rules.DRIVE_YAW_TOL_DEG
-        )
-        return ok, detail
+            return False, detail + f"; the robot drove toward {side}: turn the model so its front faces +X", found
+        return _all_ok(found), detail, found
     if check_id == "TURN":
         rate = (yaw[after][-1] - yaw[after][0]) / span
         drift = float(np.max(np.hypot(x - x[0], y - y[0])))
@@ -128,8 +140,18 @@ def evaluate(base: WheeledBase, check_id: str, sent: Commands, path: np.ndarray)
             # A skid-steer robot turns by sliding its wheels sideways, so its yaw rate and the point it
             # turns about depend on the engine's friction model. Ask for a clear left turn within one
             # track width.
-            return rate > rules.SKID_TURN_MIN * sent.yaw_rate and drift <= base.track, detail
-        return abs(rate - sent.yaw_rate) <= rules.TURN_TOL * sent.yaw_rate and drift <= rules.TURN_DRIFT, detail
+            least = rules.SKID_TURN_MIN * sent.yaw_rate
+            found = [
+                _asset("yaw rate", rate, least, "rad/s", rate > least, "min"),
+                _asset("centre drift", drift, base.track, "m", drift <= base.track),
+            ]
+        else:
+            error, allowed = abs(rate - sent.yaw_rate), rules.TURN_TOL * sent.yaw_rate
+            found = [
+                _asset("yaw rate error", error, allowed, "rad/s", error <= allowed),
+                _asset("centre drift", drift, rules.TURN_DRIFT, "m", drift <= rules.TURN_DRIFT),
+            ]
+        return _all_ok(found), detail, found
     if check_id == "STEER":
         # The least-squares circle through the path after the start-up.
         xs, ys = x[after], y[after]
@@ -138,13 +160,27 @@ def evaluate(base: WheeledBase, check_id: str, sent: Commands, path: np.ndarray)
         radius = math.sqrt(c + cx**2 + cy**2)
         rate = (yaw[after][-1] - yaw[after][0]) / span
         detail = f"turning radius {radius:.2f} m (expected {sent.radius:.2f}), yaw rate {math.degrees(rate):.1f} deg/s"
-        return rate > 0 and abs(radius - sent.radius) <= rules.TURN_TOL * sent.radius, detail
+        error, allowed = abs(radius - sent.radius), rules.TURN_TOL * sent.radius
+        found = [
+            _asset("turning radius error", error, allowed, "m", error <= allowed),
+            _asset("yaw rate", rate, 0.0, "rad/s", rate > 0, "min"),  # it turns left
+        ]
+        return _all_ok(found), detail, found
     raise ValueError(check_id)
+
+
+def _asset(quantity: str, value: float, limit: float, unit: str, ok, bound="max") -> Measurement:
+    """A measurement of the whole robot: the path of its driven axle's centre."""
+    return Measurement("", "", quantity, float(value), float(limit), unit, bool(ok), bound)
+
+
+def _all_ok(found: list[Measurement]) -> bool:
+    return all(m.ok for m in found)
 
 
 def wheeled(engine: Engine, asset: Asset, check_id: str) -> CheckResult:
     sent = commands(asset.wheeled, check_id)
     lift = rules.DROP_HEIGHT if check_id == "STAND" else 0.0
     trace = engine.drive(sent.wheels, sent.steer, sent.seconds, lift, rules.BASE_SAMPLE_DT)
-    ok, detail = evaluate(asset.wheeled, check_id, sent, axle_path(asset, trace))
-    return judge(check_id, ok, detail)
+    ok, detail, found = evaluate(asset.wheeled, check_id, sent, axle_path(asset, trace))
+    return judge(check_id, ok, detail, found)

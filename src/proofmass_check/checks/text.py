@@ -23,3 +23,12 @@ def speed_unit(joint: Joint) -> str:
 
 def effort_unit(joint: Joint) -> str:
     return "N m" if joint.revolute else "N"
+
+
+def si_unit(joint: Joint) -> str:
+    """The SI unit of a joint position, as a measurement in results.json gives it."""
+    return "rad" if joint.revolute else "m"
+
+
+def si_speed_unit(joint: Joint) -> str:
+    return "rad/s" if joint.revolute else "m/s"

@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 
-from proofmass_check.checks import CheckResult, judge
+from proofmass_check.checks import CheckResult, Measurement, judge
 from proofmass_check.engines.base import Engine
 from proofmass_check.geometry import lowest_collider, tilt
 from proofmass_check.model import Asset
@@ -36,9 +36,15 @@ def drop(engine: Engine, asset: Asset, floor: float) -> CheckResult:
     turned = math.degrees(tilt(asset.bodies[root].pose[:3, :3], outcome.poses[root][0])) if outcome.finite else math.nan
     finite = outcome.finite and bool(np.isfinite(gap))
     gap_mm = round(gap * 1000, 2) + 0.0  # adding 0.0 turns -0.0 into 0.0, so the text never says "-0.00 mm"
+    speed = outcome.root_speed
+    measurements = (
+        Measurement("", "", "final speed", speed, REST_SPEED, "m/s", finite and speed < REST_SPEED),
+        Measurement("", "", "lowest collider from the floor", gap, FLOOR_TOL, "m", finite and abs(gap) < FLOOR_TOL),
+        Measurement("", "", "tilt", math.radians(turned), None, "rad", True),  # reported, not judged
+    )
     return judge(
         "DROP",
-        resting(finite, outcome.root_speed, gap),
-        f"final speed {outcome.root_speed:.4f} m/s, lowest collider {gap_mm:+.2f} mm from the floor, "
-        f"tilted {turned:.0f} deg",
+        resting(finite, speed, gap),
+        f"final speed {speed:.4f} m/s, lowest collider {gap_mm:+.2f} mm from the floor, tilted {turned:.0f} deg",
+        measurements,
     )

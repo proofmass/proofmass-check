@@ -4,7 +4,7 @@
 
 import dataclasses
 
-from proofmass_check.checks import CheckResult, judge
+from proofmass_check.checks import CheckResult, Measurement, judge
 from proofmass_check.engines.base import LoadOutcome
 from proofmass_check.model import Asset
 from proofmass_check.rules import MASS_TOL
@@ -33,7 +33,14 @@ def load(asset: Asset, outcome: LoadOutcome) -> CheckResult:
     if outcome.unknown:
         detail += f"; engine joints that are not in the USD: {list(outcome.unknown)}"
     mass_ok = usd_mass is None or abs(engine_mass - usd_mass) <= MASS_TOL * usd_mass
-    return judge("LOAD", built(outcome) and mass_ok, detail)
+    measurements = [
+        Measurement("", "", "joints the engine did not build", len(outcome.missing), 0, "1", not outcome.missing),
+        Measurement("", "", "engine joints not in the USD", len(outcome.unknown), 0, "1", not outcome.unknown),
+    ]
+    if usd_mass is not None:
+        difference = abs(engine_mass - usd_mass) / usd_mass
+        measurements.append(Measurement("", "", "mass difference", difference, MASS_TOL, "1", mass_ok))
+    return judge("LOAD", built(outcome) and mass_ok, detail, measurements)
 
 
 def with_engine_masses(asset: Asset, outcome: LoadOutcome) -> Asset:

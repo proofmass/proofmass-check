@@ -248,6 +248,36 @@ Two things about Newton that a reader of its results must know:
 the tool and engine versions, the SHA-256 of the asset's root file, the variants, the settings,
 every verdict with its detail, and notes.
 
+**Measurements.** Each check that ran also lists the numbers it compared with its rule, so that a
+program can read them without the detail text. A measurement has a subject (a joint, a gripper
+site, or empty for the whole asset), a case, a quantity, a value and a limit in SI units, a bound
+(`max`: the rule wants value <= limit, `min`: value >= limit), a unit, and `ok`.
+
+- `ok` is what the check decided for that number, with the comparison that decides its verdict. A
+  check passes when every one of its measurements is ok. GRIP, when no drive closes the fingers,
+  and a wheeled check whose path is not finite fail with no measurements.
+- A value that is not finite is written as `null`. The limit is `null` for a number the check
+  reports but does not judge.
+- The detail text says the same in words. Only the measurements are meant for programs: the text
+  can change between versions.
+
+| Check | Subject and case | Quantity: limit |
+|---|---|---|
+| LOAD | asset | joints the engine did not build: 0; engine joints not in the USD: 0; mass difference (a fraction of the USD mass): `MASS_TOL`, only when the USD gives every mass |
+| DROP | asset | final speed: `REST_SPEED`; lowest collider from the floor (signed): `FLOOR_TOL`; tilt: none |
+| HOLD | joint | error: one tolerance |
+| TRACK | joint, `25%` and `75%` | error: one tolerance |
+| LIMIT | joint, `upper` | past the limit: `LIMIT_TOL` tolerances |
+| STABLE | asset | unstable poses: 0 |
+| SPEED | joint | highest speed: the speed limit plus `SPEED_TOL`; driven joints outside their limits at the end: 0; speed in the steps not measured: none |
+| PASSIVE | joint, `upper` and `lower` | distance from the limit: `LIMIT_TOL` tolerances; push: the hand push |
+| GRIP | site, `out of the fingers` and `along the grip line` | highest load held (kg, `min`): `GRIP_LOAD` times `gripper_maxPayload` |
+| SHAKE | site | slip along the pads: `GRIP_SLIP` |
+| STAND | asset | tilt: `STAND_TILT_DEG`; speed: `STAND_SPEED` |
+| DRIVE | asset | distance along +X (`min`): 0, and the sideways drift no larger; speed error: `DRIVE_SPEED_TOL` of the command; sideways drift: `DRIVE_DRIFT_TOL` of the distance; heading change: `DRIVE_YAW_TOL_DEG` |
+| TURN | asset | differential: yaw rate error, `TURN_TOL` of the expected rate, and centre drift, `TURN_DRIFT`. Skid steer: yaw rate (`min`), `SKID_TURN_MIN` of the expected rate, and centre drift, one track width |
+| STEER | asset | turning radius error: `TURN_TOL` of the Ackermann radius; yaw rate (`min`): 0 |
+
 ## 7. Not in this version
 
 - Wheeled robots without `SimReady_Metadata.mobile`: the checks do not find their wheels yet.

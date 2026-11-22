@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from proofmass_check.checks import CheckResult, judge, text
+from proofmass_check.checks import CheckResult, Measurement, judge, text
 from proofmass_check.engines.base import Engine
 from proofmass_check.model import Joint
 from proofmass_check.rules import LIMIT_TOL, OVERSHOOT, SEED, TRACK_AT, UNSTABLE_SPEED, Settings
@@ -31,39 +31,49 @@ def move_time(settings: Settings, distance: float, max_speed: float) -> float:
 
 def hold(engine: Engine, driven: Sequence[Joint], settings: Settings) -> CheckResult:
     state = engine.settle(rest_pose(driven), settings.settle_s)
-    errors = {j.name: abs(state.positions[j.name] - j.rest) for j in driven}
-    ok = state.finite and all(errors[j.name] <= settings.tolerance(j.revolute) for j in driven)
-    return judge("HOLD", ok, "; ".join(f"{j.name} {text.error(j, errors[j.name])}" for j in driven))
+    measurements = []
+    for joint in driven:
+        error, tolerance = abs(state.positions[joint.name] - joint.rest), settings.tolerance(joint.revolute)
+        ok = state.finite and error <= tolerance
+        measurements.append(Measurement(joint.name, "", "error", error, tolerance, text.si_unit(joint), ok))
+    detail = "; ".join(f"{m.subject} {text.error(j, m.value)}" for j, m in zip(driven, measurements, strict=True))
+    return judge("HOLD", all(m.ok for m in measurements), detail, measurements)
 
 
 def track(engine: Engine, driven: Sequence[Joint], limited: Sequence[Joint], settings: Settings) -> CheckResult:
-    rows, ok_all = [], True
+    rows, measurements = [], []
     for joint in limited:
+        tolerance = settings.tolerance(joint.revolute)
         for fraction in TRACK_AT:
             target = joint.lower + fraction * (joint.upper - joint.lower)
             state = engine.settle(
                 {**rest_pose(driven), joint.name: target}, move_time(settings, target - joint.rest, joint.max_speed)
             )
             error = abs(state.positions[joint.name] - target)
-            ok = state.finite and error <= settings.tolerance(joint.revolute)
-            ok_all &= ok
+            ok = state.finite and error <= tolerance
+            measurements.append(
+                Measurement(joint.name, f"{fraction:.0%}", "error", error, tolerance, text.si_unit(joint), ok)
+            )
             rows.append(f"{joint.name}@{fraction:.0%} {text.error(joint, error)}{'' if ok else ' FAIL'}")
-    return judge("TRACK", ok_all, "; ".join(rows))
+    return judge("TRACK", all(m.ok for m in measurements), "; ".join(rows), measurements)
 
 
 def limit(engine: Engine, driven: Sequence[Joint], limited: Sequence[Joint], settings: Settings) -> CheckResult:
     """Each drive is sent OVERSHOOT of its range past its upper limit. It may stop LIMIT_TOL tolerances past it."""
-    rows, ok_all = [], True
+    rows, measurements = [], []
     for joint in limited:
         target = joint.upper + OVERSHOOT * (joint.upper - joint.lower)
         state = engine.settle(
             {**rest_pose(driven), joint.name: target}, move_time(settings, joint.upper - joint.rest, joint.max_speed)
         )
         past = state.positions[joint.name] - joint.upper
-        ok = state.finite and past <= LIMIT_TOL * settings.tolerance(joint.revolute)
-        ok_all &= ok
-        rows.append(f"{joint.name} {text.error(joint, max(past, 0.0))} past limit{'' if ok else ' FAIL'}")
-    return judge("LIMIT", ok_all, "; ".join(rows))
+        allowed = LIMIT_TOL * settings.tolerance(joint.revolute)
+        ok = state.finite and past <= allowed
+        # A joint that stops short of its limit is 0 past it. max() keeps a NaN, which then fails.
+        past = max(past, 0.0)
+        measurements.append(Measurement(joint.name, "upper", "past the limit", past, allowed, text.si_unit(joint), ok))
+        rows.append(f"{joint.name} {text.error(joint, past)} past limit{'' if ok else ' FAIL'}")
+    return judge("LIMIT", all(m.ok for m in measurements), "; ".join(rows), measurements)
 
 
 def stable(engine: Engine, driven: Sequence[Joint], limited: Sequence[Joint], settings: Settings) -> CheckResult:
@@ -77,4 +87,5 @@ def stable(engine: Engine, driven: Sequence[Joint], limited: Sequence[Joint], se
         }
         state = engine.settle(pose, settings.settle_s)
         unstable += (not state.finite) or state.max_speed > UNSTABLE_SPEED
-    return judge("STABLE", unstable == 0, f"{unstable} unstable")
+    measurement = Measurement("", "", "unstable poses", int(unstable), 0, "1", unstable == 0)
+    return judge("STABLE", unstable == 0, f"{unstable} unstable", [measurement])

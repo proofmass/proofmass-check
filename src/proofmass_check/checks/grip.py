@@ -11,7 +11,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from proofmass_check.checks import CheckResult, judge, not_applicable
+from proofmass_check.checks import CheckResult, Measurement, judge, not_applicable
 from proofmass_check.engines.base import Engine, GripBox, GripOutcome, GripSetup
 from proofmass_check.geometry import apply, turn
 from proofmass_check.model import Asset, GripperSite, Joint
@@ -114,7 +114,8 @@ def grip_and_shake(engine: Engine, asset: Asset, site: GripperSite, settings: Se
     )
     scene = engine.grip_scene(setup)
 
-    def held(outcome: GripOutcome) -> tuple[bool, str]:
+    def held(outcome: GripOutcome) -> tuple[bool, str, float]:
+        """Whether the grip held, in words, and how far the box slid along the pads (m)."""
         motion = np.asarray(outcome.motion, float)
         drift = float(abs(motion @ site.closing))
         slip = float(np.linalg.norm(motion - (motion @ site.closing) * site.closing))
@@ -123,21 +124,34 @@ def grip_and_shake(engine: Engine, asset: Asset, site: GripperSite, settings: Se
         words = f"slid {slip * 1000:.1f} mm" if slip < 0.1 else "the box is lost"
         if GRIP_SLIP <= drift < 0.1:
             words += f", drifted {drift * 1000:.1f} mm with the fingers"
-        return ok, words + ("" if ok else " SLIP" if closed else " NOT GRIPPED")
+        return ok, words + ("" if ok else " SLIP" if closed else " NOT GRIPPED"), slip
 
     payload = site.payload
-    rows, best_both = [], []
+    rows, measurements = [], []
     for label, direction in (("out of the fingers", site.forward), ("along the grip line", site.line)):
         best, tried = 0.0, []
         for fraction in GRIP_LOADS:
-            ok, words = held(scene.trial(fraction * payload, direction, shake=False))
+            ok, words, _ = held(scene.trial(fraction * payload, direction, shake=False))
             tried.append(f"{fraction * payload:g} kg {words}")
             if not ok:
                 break
             best = fraction
-        best_both.append(best)
         rows.append(f"{label} holds {best * payload:g} kg ({', '.join(tried)})")
-    grip = judge("GRIP", min(best_both) >= GRIP_LOAD, f"site {site.name}, payload {payload:g} kg: " + "; ".join(rows))
-    ok, words = held(scene.trial(GRIP_LOAD * payload, site.forward, shake=True))
-    shake = judge("SHAKE", ok, f"{GRIP_LOAD * payload:g} kg at {SHAKE_HZ:g} Hz: {words}")
+        measurements.append(
+            Measurement(
+                site.name,
+                label,
+                "highest load held",
+                best * payload,
+                GRIP_LOAD * payload,
+                "kg",
+                best >= GRIP_LOAD,
+                "min",
+            )
+        )
+    detail = f"site {site.name}, payload {payload:g} kg: " + "; ".join(rows)
+    grip = judge("GRIP", all(m.ok for m in measurements), detail, measurements)
+    ok, words, slip = held(scene.trial(GRIP_LOAD * payload, site.forward, shake=True))
+    slipped = Measurement(site.name, "", "slip along the pads", slip, GRIP_SLIP, "m", ok)
+    shake = judge("SHAKE", ok, f"{GRIP_LOAD * payload:g} kg at {SHAKE_HZ:g} Hz: {words}", [slipped])
     return [grip, shake]

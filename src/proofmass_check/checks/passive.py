@@ -12,7 +12,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from proofmass_check.checks import CheckResult, judge, text
+from proofmass_check.checks import CheckResult, Measurement, judge, text
 from proofmass_check.engines.base import Engine
 from proofmass_check.geometry import apply
 from proofmass_check.model import Asset, Joint
@@ -84,33 +84,47 @@ def hand_budget(asset: Asset, joint: Joint, seconds: float) -> float:
 
 def passive(engine: Engine, asset: Asset, joints: Sequence[Joint], settings: Settings) -> CheckResult:
     seconds = PUSH_SETTLE * settings.settle_s
-    rows, ok_all = [], True
+    rows, measurements = [], []
     for joint in joints:
-        for row, ok in _push_both_ways(engine, asset, joint, seconds, settings):
-            ok_all &= ok
+        for row, ok, found in _push_both_ways(engine, asset, joint, seconds, settings):
+            measurements += found
             rows.append(row + ("" if ok else " FAIL"))
-    return judge("PASSIVE", ok_all, "; ".join(rows))
+    return judge("PASSIVE", all(m.ok for m in measurements), "; ".join(rows), measurements)
 
 
 def _push_both_ways(engine: Engine, asset: Asset, joint: Joint, seconds: float, settings: Settings):
+    """For each limit: the detail text, whether the joint reached it, and the measurements.
+
+    The rule is that the joint reaches the limit with a push of at most the hand budget. So both the
+    distance from the limit and the push it took carry the verdict of that limit.
+    """
     effort, budget = base_push(asset, joint, seconds), hand_budget(asset, joint, seconds)
     margin = LIMIT_TOL * settings.tolerance(joint.revolute)
     unit = text.effort_unit(joint)
+
+    def measured(side: str, error: float, tried: float, ok: bool) -> list[Measurement]:
+        return [
+            Measurement(joint.name, side, "distance from the limit", error, margin, text.si_unit(joint), ok),
+            Measurement(joint.name, side, "push", tried, budget, unit, ok),
+        ]
+
     for sign, limit, side in ((1, joint.upper, "upper"), (-1, joint.lower, "lower")):
         tried = effort
         error = abs(engine.push(joint.name, sign * tried, seconds) - limit)
         ok = math.isfinite(error) and error <= margin
         if ok:
-            yield f"{joint.name}@{side} {text.error(joint, error)} from the limit", True
+            yield (
+                f"{joint.name}@{side} {text.error(joint, error)} from the limit",
+                True,
+                measured(side, error, tried, ok),
+            )
             continue
         while not ok and tried < budget:
             tried = min(tried * PUSH_STEP, budget)
             error = abs(engine.push(joint.name, sign * tried, seconds) - limit)
             ok = math.isfinite(error) and error <= margin
         if ok:
-            yield f"{joint.name}@{side} needs {tried:.3g} {unit} (base push {effort:.3g}, hand {budget:.3g})", True
+            row = f"{joint.name}@{side} needs {tried:.3g} {unit} (base push {effort:.3g}, hand {budget:.3g})"
         else:
-            yield (
-                f"{joint.name}@{side} {text.error(joint, error)} from the limit at the hand push {budget:.3g} {unit}",
-                False,
-            )
+            row = f"{joint.name}@{side} {text.error(joint, error)} from the limit at the hand push {budget:.3g} {unit}"
+        yield row, ok, measured(side, error, tried, ok)

@@ -136,3 +136,16 @@ def test_a_measurement_that_runs_out_of_a_solver_buffer_runs_again_with_a_larger
     small_sizes = engine.settle({"arm_joint": 0.3}, seconds=0.5)
     assert newton_sizes.positions["arm_joint"] < 0.1  # the floor stops the bar
     assert small_sizes.positions == pytest.approx(newton_sizes.positions, abs=1e-6)
+
+
+def test_an_asset_after_another_gives_the_same_results(engine, arm, prop):
+    """`run` with several assets runs them in one start of the engine, so a run must not depend on the one before.
+
+    Newton's numbers can differ from run to run (docs/spec.md, section 5), so there only the verdicts must match.
+    """
+    first = verdicts(engine, arm)
+    verdicts(engine, prop)
+    again = verdicts(engine, arm)
+    if engine.name == "newton":
+        first, again = ({k: v for k, (v, _) in r.items()} for r in (first, again))
+    assert again == first
