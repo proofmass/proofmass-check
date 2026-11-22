@@ -5,6 +5,7 @@
 import json
 import math
 
+import numpy as np
 import pytest
 import usd_assets
 
@@ -71,3 +72,22 @@ def test_the_inspect_command(tmp_path, capsys):
     assert cli.main(["inspect", str(arm), "--variant", "PhysX=On"]) == cli.ERROR
     assert "no variant 'PhysX=On'" in capsys.readouterr().err
     assert cli.main(["inspect", str(tmp_path / "none.usda")]) == cli.ERROR
+
+
+def test_which_joints_the_checks_test(tmp_path):
+    arm = inspect_asset(usd_assets.arm(tmp_path / "arm.usda"), "physx", [], Settings(), geometry=False)
+    hinge = next(j for j in arm["joints"] if j["name"] == "arm_joint")
+    assert (hinge["driven"], hinge["pushed"], hinge["limited"]) == (True, False, True)
+    # The centre of what the hinge carries is 0.2 m from its axis: a 3D view draws the arc of its range there.
+    arm_out = np.subtract(hinge["carried_centre"], hinge["pivot"])
+    assert np.linalg.norm(np.cross(arm_out, hinge["direction"])) == pytest.approx(0.2)
+    cabinet = inspect_asset(usd_assets.cabinet(tmp_path / "cabinet.usda"), "physx", [], Settings(), geometry=False)
+    assert {j["name"] for j in cabinet["joints"] if j["pushed"]} == {"drawer_joint", "door_joint"}
+    assert not any(j["driven"] for j in cabinet["joints"])
+
+
+def test_the_grip_box_of_a_gripper_site(tmp_path):
+    data = inspect_asset(usd_assets.gripper(tmp_path / "gripper.usda"), "physx", [], Settings(), geometry=False)
+    box = data["sites"][0]["grip_box"]
+    assert box["size"] == pytest.approx([0.042, 0.02, 0.02])  # 0.7 of the 60 mm opening, and the pad size
+    assert box["centre"] == pytest.approx([0.0, 0.0, 0.08]) and np.linalg.det(box["rotation"]) == pytest.approx(1.0)

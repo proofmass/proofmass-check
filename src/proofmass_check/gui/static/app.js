@@ -875,6 +875,24 @@ async function inspectView(spec) {
     return row;
   });
 
+  // Which joints the checks test: the same sets as the plan (plan.py), from inspect.
+  const filters = [
+    ['all', 'All', () => true],
+    ['driven', 'Driven', j => j.driven],
+    ['pushed', 'Pushed by PASSIVE', j => j.pushed],
+    ['free', 'No limits', j => j.kind !== 'fixed' && !j.limited],
+    ['follows', 'Follows another', j => j.mimic !== null],
+    ['marked', 'Marked by the run', j => Boolean(marks[j.name])],
+  ].filter(([name, , test]) => name === 'all' || (name !== 'marked' || runName) && d.joints.some(test));
+  const filterLinks = filters.map(([name, label, test]) => {
+    const count = d.joints.filter(test).length;
+    return h('a', {href: '#', 'data-filter': name, class: name === 'all' ? 'on' : null, onclick: event => {
+      event.preventDefault();
+      for (const link of filterLinks) link.classList.toggle('on', link === event.currentTarget);
+      for (const j of d.joints) rows.get(j.name).hidden = !test(j);
+    }}, `${label} (${count})`);
+  });
+
   fill(main,
     h('h1', {}, d.name, h('span', {class: 'seg'}, ['physx', 'newton'].map(e =>
       h('a', {class: e === engine ? 'on' : null, href: inspectHref({...spec, engine: e})}, e)))),
@@ -889,7 +907,8 @@ async function inspectView(spec) {
       + 'Red: a measurement failed. Amber: it passed close to its limit.', true) : null,
     canvas,
     h('p', {class: 'sub'}, 'Drag to turn, Shift+drag to move, the wheel to zoom, double-click to reset. '
-      + 'Click a joint here or in the table to find it. The view shows the colliders, which are what the engine collides.'),
+      + 'Click a joint here or in the table to find it and see its range: an arc or a segment, with a tick at the file pose. '
+      + 'The view shows the colliders, which are what the engine collides. Dashed: the box GRIP closes on.'),
     h('h2', {}, 'Plan', h('span', {class: 'muted'}, `for ${engine}`)),
     banner(EXPECTED_NOTE, true),
     h('div', {class: 'scroll'}, h('table', {}, h('tbody', {}, d.plan.map(p => h('tr', {},
@@ -897,7 +916,8 @@ async function inspectView(spec) {
       h('td', {}, p.runs ? h('span', {class: 'badge'}, 'runs') : h('span', {class: 'v na'}, 'N/A')),
       h('td', {}, p.title, p.reason ? h('div', {class: 'muted'}, p.reason) : null)))))),
     d.notes.length ? h('ul', {class: 'notes banner'}, d.notes.map(n => h('li', {}, n))) : null,
-    h('h2', {}, 'Joints', h('span', {class: 'muted'}, 'click a row to find it in 3D')),
+    h('h2', {}, 'Joints', h('span', {class: 'muted'}, 'click a row to find it in 3D and see its range')),
+    h('div', {class: 'toolbar'}, h('span', {class: 'seg', role: 'group', 'aria-label': 'Show the joints'}, filterLinks)),
     h('div', {class: 'scroll'}, h('table', {class: 'joints'},
       h('thead', {}, h('tr', {}, ['Joint', 'Type', 'Moves', 'Limits', 'Rest', 'Drive', 'Speed limit', 'Carries',
         'Gravity load / max force', 'Follows'].map(t => h('th', {}, t)))),

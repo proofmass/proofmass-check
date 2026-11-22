@@ -19,9 +19,10 @@ import numpy as np
 
 from proofmass_check import __version__, usd_reader
 from proofmass_check.checks import TITLES
-from proofmass_check.checks.passive import lever
+from proofmass_check.checks.grip import grip_box
+from proofmass_check.checks.passive import lever, passive_joints
 from proofmass_check.engines.capabilities import CAPABILITIES, supported
-from proofmass_check.geometry import floor_height
+from proofmass_check.geometry import apply, floor_height
 from proofmass_check.model import Asset, Body, Joint
 from proofmass_check.plan import make_plan
 from proofmass_check.rules import GRAVITY, SPEC_VERSION, Settings
@@ -38,6 +39,7 @@ def inspect_asset(file: Path, engine: str, requested: list[str], settings: Setti
         asset = asset.with_mjc_drives()
     plan = make_plan(asset, engine, supported(engine, asset), settings)
     prims = usd_reader.authored(file, variants, [j.prim for j in asset.joints])
+    pushed = {j.name for j in passive_joints(asset)}
     return {
         "tool": {"name": "proofmass-check", "version": __version__},
         "spec_version": SPEC_VERSION,
@@ -53,7 +55,7 @@ def inspect_asset(file: Path, engine: str, requested: list[str], settings: Setti
         "plan": [{"id": c, "title": TITLES[c], "runs": plan.runs(c), "reason": plan.skip.get(c)} for c in TITLES],
         "notes": list(plan.notes),
         "bodies": [_body(b, geometry) for b in asset.bodies.values()],
-        "joints": [_joint(asset, j, prims.get(j.prim, {})) for j in asset.joints],
+        "joints": [_joint(asset, j, prims.get(j.prim, {}), pushed) for j in asset.joints],
         "sites": [_site(s) for s in asset.sites],
         "wheeled": _wheeled(asset),
     }
@@ -89,7 +91,8 @@ def _body(body: Body, geometry: bool) -> dict:
     return data
 
 
-def _joint(asset: Asset, joint: Joint, prim: dict) -> dict:
+def _joint(asset: Asset, joint: Joint, prim: dict, pushed: set[str]) -> dict:
+    """A joint as JSON. pushed: the joints PASSIVE pushes (checks/passive.py, passive_joints)."""
     drive = joint.drive
     source = None
     if drive is not None:
@@ -114,6 +117,9 @@ def _joint(asset: Asset, joint: Joint, prim: dict) -> dict:
         "drive_from": source,
         "mimic": None if joint.mimic is None else {"leader": joint.mimic.leader, "ratio": joint.mimic.ratio},
         "d6": joint.d6,
+        "driven": joint.drive_kind == "position",  # HOLD, TRACK, LIMIT and STABLE move it
+        "pushed": joint.name in pushed,  # PASSIVE pushes it
+        "limited": joint.limited,
         **_load(asset, joint),
         "schemas": prim.get("schemas", []),
         "attributes": prim.get("attributes", {}),
@@ -121,18 +127,21 @@ def _joint(asset: Asset, joint: Joint, prim: dict) -> dict:
 
 
 def _load(asset: Asset, joint: Joint) -> dict:
-    """The mass a joint carries, the distance of its centre from the axis, and its largest gravity load.
+    """The mass a joint carries, where its centre is, its distance from the axis, and the largest gravity load.
 
     The gravity load is the term PASSIVE starts its push from (checks/passive.py, base_push), without
     the factor: N m for a revolute joint, N for a prismatic one. It is a number to read next to the
     drive's max force. It decides nothing.
     """
+    unknown = {"carried_mass": None, "carried_centre": None, "lever": None, "gravity_load": None}
     if not joint.moves or joint.pivot is None or joint.direction is None:
-        return {"carried_mass": None, "lever": None, "gravity_load": None}
+        return unknown
     try:
         mass, distance = lever(asset, joint)
     except ValueError:  # a mass that only the engine computes
-        return {"carried_mass": None, "lever": None, "gravity_load": None}
+        return unknown
+    carried = [asset.bodies[path] for path in asset.carried(joint.body1)] if joint.body1 else []
+    centre = sum(b.mass * apply(b.pose, b.com) for b in carried) / mass if mass > 0 else None
     axis = joint.direction
     if joint.revolute:
         tilt = float(np.linalg.norm(np.cross(axis, [0.0, 0.0, 1.0])))  # 0 for a vertical axis
@@ -141,12 +150,14 @@ def _load(asset: Asset, joint: Joint) -> dict:
         load = mass * GRAVITY * abs(float(axis[2]))
     return {
         "carried_mass": _number(mass),
+        "carried_centre": _vector(centre),  # m, in the world, file pose: where a 3D view draws a limit's arc
         "lever": _number(distance) if joint.revolute else None,
         "gravity_load": _number(load),
     }
 
 
 def _site(site) -> dict:
+    box = grip_box(site)  # the box GRIP closes the fingers on (checks/grip.py)
     return {
         "name": site.name,
         "body": site.body,
@@ -157,6 +168,11 @@ def _site(site) -> dict:
         "opening": _number(site.opening),
         "pad": _number(site.pad),
         "payload": _number(site.payload),
+        "grip_box": {
+            "size": [_number(v) for v in box.size],  # m: across the pads, along the grip line, along the approach
+            "centre": _vector(box.centre),
+            "rotation": [_vector(row) for row in box.rotation],  # its columns are the box's axes in the world
+        },
     }
 
 

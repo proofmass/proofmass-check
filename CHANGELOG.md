@@ -46,7 +46,11 @@ and the spec version.
 - The GUI's inspector, phase 3 of docs/gui.md: the plan of an asset before a run, its joints,
   bodies and attributes, and a 3D view of its colliders, joints and gripper sites. Opened from a
   run, it marks the joints whose measurements failed or came close to their limits. The 3D view
-  is drawn on a 2D canvas, with no library.
+  is drawn on a 2D canvas, with no library. It shows the range of the selected joint (an arc or a
+  segment), the box GRIP closes on, and a wheeled robot's front (+X). The joints table filters the
+  joints the checks move, push, leave without limits, or that follow another joint. inspect gives
+  each joint's role (`driven`, `pushed`, `limited`), the centre of what it carries, and each gripper
+  site's GRIP box.
 - `Joint.prim`: the path of the joint's prim in the stage.
 
 ### Changed
