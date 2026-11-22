@@ -10,6 +10,7 @@ sends no CORS headers (docs/gui.md, section 4.2).
 
 import hmac
 import json
+import re
 import secrets
 import sys
 import threading
@@ -31,7 +32,9 @@ TYPES = {
     ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".svg": "image/svg+xml",
+    ".woff2": "font/woff2",
 }
+FONT = re.compile(r"fonts/[a-z0-9-]+\.woff2")  # the fonts of proofmass.com, in static/fonts (SIL OFL 1.1)
 MAX_BODY = 1_000_000  # bytes: a request body is a short JSON object
 # The page runs only its own files. The token is in the page's URL, so no page it links to may
 # receive that URL as a referrer.
@@ -65,6 +68,7 @@ class App:
         self.folders: dict[str, runs.Folder] = {}
         self._lock = threading.Lock()
         self._next_id = 1
+        self._ended: dict[Path, int] = {}  # a batch's folder: how many of its assets had ended when it was read
         self.settings_path = settings_path or gui_settings.settings_file()
         self.workspace = workspace
         self.batches = batches.Manager(self.settings)
@@ -83,6 +87,25 @@ class App:
                 if known.path == path.resolve():
                     return folder_id
         return self.open(path)
+
+    def batch_folder(self, batch: dict, only_open: bool = False) -> str | None:
+        """The ID of a batch's folder, read again when one of its assets ended since it was read.
+
+        The asset that ended has a new results file, and the folder's matrix must show it, even when
+        no page followed the batch while it ran. batch: the batch's state (batches.Manager.state).
+        only_open: give None for a folder that is not open, and do not open it.
+        """
+        path = Path(batch["path"]).resolve()
+        ended = sum(a["state"] not in ("waiting", "running") for r in batch["runs"] for a in r["assets"])
+        with self._lock:
+            known = path in (f.path for f in self.folders.values())
+            fresh = known and self._ended.get(path) == ended
+        if only_open and not known:
+            return None
+        folder_id = self.ensure_open(path) if fresh else self.open(path)
+        with self._lock:
+            self._ended[path] = ended
+        return folder_id
 
     def open(self, path: str | Path) -> str:
         """Read a folder, and give its ID. A folder that is open already is read again."""
@@ -230,7 +253,7 @@ class Handler(BaseHTTPRequestHandler):
                 batches.parse_request(body, self.app.settings()), self.app.settings()
             ),
             ("POST", "/api/batches"): lambda: self._batch(self.app.batches.create(body)),
-            ("GET", "/api/batches"): lambda: self.app.batches.batches(),
+            ("GET", "/api/batches"): lambda: self._batches(),
             ("GET", "/api/batch"): lambda: self._batch(self.app.batches.folder(_one(query, "id"))),
             ("POST", "/api/batch-cancel"): lambda: self._cancel(body),
             ("GET", "/api/batch-log"): lambda: {
@@ -307,7 +330,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _batch(self, folder: Path) -> dict:
         """A batch's state, and the ID of its folder among the open folders, for its matrix."""
-        return self.app.batches.state(folder) | {"folder": self.app.ensure_open(folder)}
+        found = self.app.batches.state(folder)
+        return found | {"folder": self.app.batch_folder(found)}
+
+    def _batches(self) -> list[dict]:
+        """Every batch. The open folders of batches are read again when an asset ended, for the list of folders."""
+        found = self.app.batches.batches()
+        for batch in found:
+            self.app.batch_folder(batch, only_open=True)
+        return found
 
     def _cancel(self, body: dict) -> dict:
         folder = self.app.batches.folder(body.get("id"))
@@ -319,8 +350,9 @@ class Handler(BaseHTTPRequestHandler):
     def _static(self, path: str) -> None:
         name = "index.html" if path == "/" else path.lstrip("/")
         file = STATIC / name
-        # Only the files directly in static/: a name with a "/" or ".." never leaves that folder.
-        if "/" in name or "\\" in name or file.suffix not in TYPES or not file.is_file():
+        # Only the files directly in static/, and the fonts: no other name with a "/" or ".." is served.
+        inside = "/" not in name or FONT.fullmatch(name)
+        if not inside or "\\" in name or file.suffix not in TYPES or not file.is_file():
             return self._send_json(HTTPStatus.NOT_FOUND, {"error": f"no file {path}"})
         self._send(HTTPStatus.OK, TYPES[file.suffix], file.read_bytes())
 

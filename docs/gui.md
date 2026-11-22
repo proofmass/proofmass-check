@@ -1,6 +1,6 @@
 # proofmass-check GUI: design
 
-Version 0.4 (draft). Phases 1 to 3, the viewer, the runner and the inspector, are built
+Version 0.4 (draft). Phases 1 to 3, the viewer, the runner and the inspector, are built in 0.3.0
 (section 8). Experiments are not. This file says what the GUI does, how it is built, and what must change in
 proofmass-check before it. [spec.md](spec.md) stays the authority for the checks: the GUI shows
 what the checks decide, and never decides itself.
@@ -132,7 +132,7 @@ its own line in CHANGELOG.md.
 
 ### 5.1 Measurements in results.json
 
-Built after version 0.2.0. spec.md section 6 gives the measurements of each check, and is the
+Built in version 0.3.0. spec.md section 6 gives the measurements of each check, and is the
 authority for them. This section says why they exist.
 
 Before, each check gave one `detail` line only. The GUI needs the numbers, to sort joints by margin
@@ -412,6 +412,10 @@ Whether to build it, and where, is open (section 11).
 - **Settings:** a banner on every screen of a run whose settings are not the spec's.
 - **Errors:** the error from `results.json`, and the last lines of `run.log`.
 - Light and dark themes. The matrix and the tables work with the keyboard.
+- **Look:** that of proofmass.com and its reports: the Proofmass logo, Archivo for text and
+  headings, IBM Plex Mono for codes and values, one safety orange, square corners and 1 px rules.
+  The fonts come with the package and from the page's own server (SIL OFL 1.1, see NOTICE), so
+  the page still loads nothing from another computer.
 
 ## 8. Phases
 

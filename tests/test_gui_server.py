@@ -4,12 +4,14 @@ import http.client
 import json
 import sys
 import threading
+import time
+from pathlib import Path
 
 import pytest
 from results_files import results, write
 
 from proofmass_check import cli
-from proofmass_check.gui import server
+from proofmass_check.gui import batches, server
 
 TOKEN = "test-token"
 
@@ -80,8 +82,16 @@ def test_another_host_or_site_is_refused(gui):
 
 def test_only_the_files_of_the_page_are_served(gui):
     port, _ = gui
-    for path in ("/../server.py", "/..%2Fserver.py", "/server.py", "/static/app.js", "/nothing.js"):
+    for path in (
+        "/../server.py", "/..%2Fserver.py", "/server.py", "/static/app.js", "/nothing.js", "/fonts/../app.css",
+        "/fonts/LICENSE-archivo.txt", "/fonts/none.woff2", "/fonts/../fonts/archivo-latin-standard-normal.woff2",
+    ):  # fmt: skip
         assert request(port, "GET", path, token=None)[0] == 404, path
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    connection.request("GET", "/fonts/archivo-latin-standard-normal.woff2", headers={"Host": f"127.0.0.1:{port}"})
+    font = connection.getresponse()
+    assert font.status == 200 and font.getheader("Content-Type") == "font/woff2" and font.read(4) == b"wOF2"
+    connection.close()
     assert request(port, "POST", "/", token=None)[0] == 405
 
 
@@ -167,6 +177,37 @@ def test_a_batch_that_cannot_start_says_why(gui, tmp_path):
     assert [f["name"] for f in found["files"]] == ["arm.usda"]
     assert api(port, "GET", "/api/batches") == []
     assert request(port, "GET", "/api/batch?id=..%2Fws")[0] == 400
+
+
+def test_a_batch_folder_shows_results_that_ended_while_no_page_followed_it(gui, tmp_path, monkeypatch):
+    port, _ = gui
+    worker = Path(__file__).parent / "fake_worker.py"
+    monkeypatch.setattr(batches, "check_python", lambda python: (True, "proofmass-check 0.3.0 (spec 0.3)"))
+    monkeypatch.setattr(batches, "command", lambda python, engine, assets, run_dir, events, *_: [
+        sys.executable, str(worker), str(events), str(run_dir), *assets
+    ])  # fmt: skip
+    api(port, "POST", "/api/settings", {"pythons": {"physx": sys.executable}})
+    asset = write(tmp_path, "assets/arm.usda", "#usda 1.0\n")
+
+    def runs_of(folder_id):
+        return next(f for f in api(port, "GET", "/api/state")["folders"] if f["id"] == folder_id)["runs"]
+
+    def ran(batch):  # waits on the files: a request for the batch would read the folder again
+        events = Path(batch["path"]) / "physx" / "events-1.jsonl"
+        deadline = time.monotonic() + 30
+        while not (events.is_file() and '"exit"' in events.read_text(encoding="utf-8")):
+            assert time.monotonic() < deadline, "the worker did not end"
+            time.sleep(0.05)
+
+    first = api(port, "POST", "/api/batches", {"assets": [str(asset)], "engines": ["physx"]})
+    ran(first)
+    assert runs_of(first["folder"]) == []  # read when the batch started
+    api(port, "GET", "/api/batches")  # the home page lists the batches before it lists the folders
+    assert len(runs_of(first["folder"])) == 1
+    second = api(port, "POST", "/api/batches", {"name": "again", "assets": [str(asset)], "engines": ["physx"]})
+    ran(second)
+    found = api(port, "GET", f"/api/batch?id={Path(second['path']).name}")  # the batch's page asks for it
+    assert runs_of(found["folder"])[0]["verdicts"]["LOAD"] == "PASS"
 
 
 def test_inspect_an_asset(gui, tmp_path):
