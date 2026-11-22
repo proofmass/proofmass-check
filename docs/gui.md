@@ -1,0 +1,426 @@
+# proofmass-check GUI: design
+
+Version 0.1 (draft). Nothing in this file is built yet. It says what the GUI does, how it is built,
+and what must change in proofmass-check before it. [spec.md](spec.md) stays the authority for the
+checks: the GUI shows what the checks decide, and never decides itself.
+
+## 1. Goal
+
+proofmass-check tests one asset in one engine, from the command line, and writes `results.json`.
+The GUI makes three tasks fast that are slow today:
+
+1. Run many assets in both engines, and see which fail and where.
+2. Find the joint that fails, and how far it is from its rule.
+3. Compare runs: PhysX with Newton, one tool version with the next, or repeated Newton runs.
+
+These tasks come from the audits of Lightwheel's appliances (10 assets) and AgiBot's G2 (46
+joints) in November 2026. In both, the results were read from `results.json` by hand, and scripts
+outside this repository listed the joints, drives and friction and made the report.
+
+**What the GUI never does:**
+
+- It never changes an asset, and never changes a setting to make a check pass.
+- It never decides a verdict. `checks/` decides, and the GUI shows `results.json`.
+- It never accepts the NVIDIA Omniverse License Agreement for the user, and never sets
+  `OMNI_KIT_ACCEPT_EULA`.
+- It never sends data off the computer: no CDN, no telemetry. An asset's licence can forbid
+  uploading it (Lightwheel's set is CC BY-NC 4.0).
+
+## 2. Words
+
+| Word | Meaning |
+|---|---|
+| run | one asset in one engine. It gives one `results.json`, as `runner.Run` does. |
+| batch | the runs the GUI starts together: some assets, in one or two engines, with one set of settings |
+| workspace | the folder where the GUI keeps its batches |
+| worker | a process that runs proofmass-check in an engine's Python |
+| measurement | one number that a check compared with its rule, with the rule's limit (section 5.1) |
+| margin | how much of its limit a measurement uses: value / limit, or limit / value for a lower bound. Above 1, the measurement fails its rule. |
+
+## 3. Users
+
+Two kinds of user. Which one comes first is open (section 11).
+
+| User | Works on | Needs most |
+|---|---|---|
+| Auditor | batches of assets from other makers, in both engines, and a report at the end | batch view, compare, report |
+| Asset maker | one asset, in a loop: change the USD, run, see what changed | a fast run of one asset, the joint view, the difference from the last run |
+
+Both need the joint view with margins, and the reason for each `N/A`.
+
+## 4. How it is built
+
+```
+browser --HTTP, 127.0.0.1--> proofmass-check gui            any Python 3.11+ with proofmass-check
+                                 |  reads and writes the workspace
+                                 |-- worker: <Isaac Sim's Python> -m proofmass_check run ...      PhysX
+                                 |-- worker: <Newton's Python>    -m proofmass_check run ...      Newton
+                                 '-- worker: <a Python with pxr>  -m proofmass_check inspect ...  no engine
+```
+
+- `proofmass-check gui [WORKSPACE]` starts a local HTTP server and opens the browser.
+- The server uses the standard library only: `http.server`, `subprocess`, `json`. The package keeps
+  numpy as its only dependency.
+- The front end is static HTML, CSS and JavaScript in `src/proofmass_check/gui/static/`, with no
+  build step. three.js, for the 3D view, is a file in that folder, with its MIT licence next to it
+  and in NOTICE.
+- Engines run only in workers. The server never imports pxr, isaacsim or newton, because each
+  engine needs its own Python (README, "Engines"), and in Isaac Sim pxr exists only after Isaac
+  Sim has started.
+- A worker gives its results to the server only through files: `results.json`, `events.jsonl` and
+  its log. So the command line stays the one interface, and a run from the GUI writes the same
+  `results.json` as the same command in a terminal.
+
+### 4.1 Pythons
+
+The settings file holds one Python per engine: `%APPDATA%\proofmass-check\gui.json` on Windows,
+`~/.config/proofmass-check/gui.json` on Linux.
+
+- The GUI tests each Python with `<python> -m proofmass_check --version` and shows the tool and
+  spec versions it prints, or the error.
+- When a worker's version differs from the GUI's, the GUI says so before a batch starts.
+  `batch.json` records the version of every worker.
+- `inspect` needs pxr without Isaac Sim: the GUI's own Python with the `usd` extra, or Newton's.
+  It must not be Isaac Sim's Python. There, pxr exists only after Isaac Sim starts, and a second
+  pxr from usd-core can clash with Isaac Sim's own (pyproject.toml).
+
+### 4.2 Security
+
+The server starts processes, so a web page open in the same browser must not reach it.
+
+- It listens on 127.0.0.1 only.
+- The command opens the browser with a random token in the URL. Every API request must carry it.
+- It checks the Host header, which stops DNS rebinding. It checks the Origin header and sends no
+  CORS headers, so another page cannot send it requests.
+- A worker runs only a Python from the settings file, with an argument list and never through a
+  shell. A path in a request is a file to read, never a command.
+- It serves files only from the static folder, the workspace, and the folders the user opened in
+  this session.
+
+### 4.3 The workspace
+
+```
+<workspace>/
+  2026-11-22_1405_lightwheel/             a batch: date, time, name
+    batch.json                            assets, engines, settings, each worker's Python and versions
+    physx/Dishwasher036/results.json      as the command line writes it
+    physx/Dishwasher036/events.jsonl      the progress of the run (section 5.2)
+    physx/Dishwasher036/run.log           the worker's stdout and stderr
+    newton/Dishwasher036/...
+```
+
+- An asset's folder has the name of its root file without the extension. When two assets of a
+  batch have the same name, the folder is the file's path below the folder the batch's assets
+  share.
+- A batch folder does not change after the batch ends. To run again, start a new batch.
+- The GUI also opens any folder that holds `results.json` files, read-only, for example results
+  made before the GUI existed.
+
+## 5. Changes to proofmass-check first
+
+Each change is useful on the command line without the GUI. Each one gets its own pull request and
+its own line in CHANGELOG.md.
+
+### 5.1 Measurements in results.json
+
+Today each check gives one `detail` line. The GUI needs the numbers, to sort joints by margin and to
+compare runs. The detail line is text for people, and its wording changes between versions (0.1.2
+changed the text of SPEED). So the GUI never parses it.
+
+Each check result gets an optional `measurements` array. `detail` stays as it is.
+
+```json
+{
+  "id": "PASSIVE",
+  "verdict": "FAIL",
+  "detail": "door_joint@upper 27.670 deg from the limit at the hand push 74 N m FAIL; ...",
+  "measurements": [
+    {"subject": "door_joint", "case": "upper", "quantity": "distance from the limit",
+     "value": 0.48293, "limit": 0.017453, "bound": "max", "unit": "rad", "ok": false}
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `subject` | a joint name, a gripper site name, or the asset's name for a number of the whole asset |
+| `case` | which test of the subject: `25%`, `upper`, `pull out`, and so on. Empty when the subject has one. |
+| `quantity` | what was measured, from a fixed list for each check (table below) |
+| `value` | in SI units, as the rest of the file |
+| `limit` | the rule's limit, in the same unit. `null` when the rule sets none (a tilt that DROP reports only). |
+| `bound` | `max`: the rule wants value <= limit. `min`: value >= limit. |
+| `unit` | `m`, `rad`, `m/s`, `rad/s`, `kg`, `N`, `N m`, or `1` for a count or a fraction |
+| `ok` | what the check decided for this measurement |
+
+- `ok` comes from the check. A check can need more than one value to decide (all values finite,
+  for example), so the GUI shows `ok` and never compares `value` and `limit` itself.
+- Values are not rounded.
+- It is a new optional field, so `schema_version` stays 1 (report.py). `results.schema.json`
+  describes it, and spec.md section 6 gives the list below once it is built.
+
+The measurements of each check, from spec.md section 4. The names are a draft.
+
+| Check | Subject | Measurement and its limit |
+|---|---|---|
+| LOAD | asset | joints the engine did not build, and engine joints not in the USD: 0 each; engine mass against USD mass, relative difference <= `MASS_TOL` when the USD gives every mass |
+| DROP | asset | root speed <= `REST_SPEED`; distance of the lowest collider from the floor <= `FLOOR_TOL`; tilt, no limit |
+| HOLD | joint | error from the rest position <= tolerance |
+| TRACK | joint, at 25 % and 75 % | error from the target <= tolerance |
+| LIMIT | joint | distance past the upper limit <= `LIMIT_TOL` tolerances |
+| STABLE | asset | unstable poses <= 0 |
+| SPEED | joint | highest speed after the first `SPEED_SKIP_STEPS` steps <= speed limit x (1 + `SPEED_TOL`); at the end, every driven joint inside its limits, give or take `LIMIT_TOL` tolerances |
+| PASSIVE | joint, at each limit | distance from the limit <= `LIMIT_TOL` tolerances; the push it needed, no limit |
+| GRIP | site, in each direction | highest load held >= `GRIP_LOAD` x `gripper_maxPayload` |
+| SHAKE | site | slip along the pads <= `GRIP_SLIP` |
+| STAND | asset | tilt <= `STAND_TILT_DEG`; speed <= `STAND_SPEED` |
+| DRIVE | asset | speed error <= `DRIVE_SPEED_TOL` of the command; drift <= `DRIVE_DRIFT_TOL` of the distance; heading change <= `DRIVE_YAW_TOL_DEG` |
+| TURN | asset | differential: yaw rate within `TURN_TOL` of the expected rate, and drift of the axle centre <= `TURN_DRIFT`. Skid steer: yaw rate above `SKID_TURN_MIN` of the expected rate, and drift <= one track width. |
+| STEER | asset | turning radius within `TURN_TOL` of the Ackermann radius |
+
+### 5.2 Progress events
+
+In the Lightwheel batch, one run took 10 s to 54 s, without the start of Isaac Sim. The command
+prints its results only at the end. A new option, `--events FILE`, writes JSON Lines as the run
+goes: one object per line, flushed after each line.
+
+| Event | Fields |
+|---|---|
+| `start` | asset file, engine, tool and spec versions |
+| `engine` | engine versions, and the seconds the engine took to start |
+| `plan` | the checks that run, and each `N/A` with its reason |
+| `check` | check ID, when the check starts |
+| `step` | check ID, the number of engine operations done, and the number expected when the plan knows it |
+| `result` | check ID and verdict |
+| `end` | passed, seconds and the path of `results.json`, or the error |
+
+- `step` comes from a wrapper around the engine that counts its operations (settle, move, push).
+  The checks do not change. When the plan cannot know the count, `step` has no total: PASSIVE, for
+  example, pushes again when a push does not reach the limit.
+- The events go to a file, not to stdout. stdout stays for people, and the GUI does not depend on
+  what an engine prints.
+
+### 5.3 The inspect command
+
+```bash
+proofmass-check inspect path/to/asset.usd --engine physx --variant SET=VALUE --geometry
+```
+
+It prints, as JSON, what the reader read and the plan, without starting an engine.
+
+- **What it gives:** the variant sets with their values and the ones selected; bodies (path, mass
+  or none, centre of mass, pose, and with `--geometry` the colliders); joints (every field of
+  `model.Joint`, in SI units); gripper sites; the wheeled base; the floor height; the plan (each
+  check runs, or is `N/A` with the reason); and the notes.
+- **Authored attributes:** for each joint prim, its applied schemas and authored attributes, as
+  text. This shows values the reader does not use, such as `physxJoint:jointFriction`, or a drive
+  instance that PhysX does not read (`PhysicsDriveAPI:X`). Both caused failures in the Lightwheel
+  set.
+- **The plan without an engine:** the plan needs the engine's `supported` set. Today that is a
+  property of a started engine, and `engines/physx.py` imports isaacsim at the top. The part that
+  depends only on the asset moves to a module that imports no engine: PhysX runs only LOAD, DROP
+  and PASSIVE on an asset without PhysicsArticulationRootAPI, and Newton does not run SPEED,
+  STAND, DRIVE, TURN and STEER.
+- **What only the engine knows:** two things are known only after the engine builds the asset.
+  In Newton, DROP needs a free joint. And an engine can have joints it cannot drive or measure one
+  by one (`LoadOutcome.not_addressable`). So inspect calls its plan "expected", and the GUI shows
+  that word.
+
+### 5.4 Several assets in one run
+
+Each run starts the engine and closes it, and PhysX ends the process when it closes. Isaac Sim can
+take a minute to start the first time (`engines/__init__.py`). So a batch of 10 assets starts Isaac
+Sim 10 times.
+
+`run` takes several assets: `proofmass-check run a.usd b.usd --out DIR` writes
+`DIR/<asset>/results.json`. The engine starts once. `Engine.open()` already loads a new asset into
+the same engine.
+
+- Each `results.json` must be the same as from a run of that asset alone. A GPU test runs two
+  assets both ways and compares the files, except for `seconds`.
+- The exit status is the highest status of its runs.
+- The GUI can still start one process per asset (a setting), so that a crash in one asset does not
+  stop the rest. When a worker stops in the middle of a batch, the GUI marks that asset as an error
+  and starts a new worker at the next asset.
+
+## 6. Screens
+
+The phase of each screen is in brackets (section 8).
+
+### 6.1 Batches (phase 1)
+
+The batches in the workspace and the folders the user opened: name, date, engines, number of
+assets, passed, failed and error, and the tool and spec versions.
+
+Actions: open a batch, compare two batches, export a report, start a new batch (phase 2).
+
+### 6.2 New batch (phase 2)
+
+- **Assets:** a file or a folder. The GUI lists the USD files it finds, and the user ticks the root
+  files. It does not guess which file is the root.
+- **Engines:** PhysX, Newton, or both. Each shows its Python and versions, or why it cannot run.
+- **Newton repeats:** 1 or more runs of each asset (section 6.7).
+- **Variants:** the variant sets the assets have (from inspect, phase 3). Before phase 3, typed as
+  `SET=VALUE`.
+- **Settings:** settle time and floor. Each shows the spec's value next to it. A value that is not
+  the spec's gets a mark here and on every screen of its results, because `results.json` then
+  says that the settings differ from the spec.
+- **The command:** the command line each worker will run, to copy, so a run from the GUI can be
+  repeated without it.
+
+### 6.3 Batch view (phase 1; live in phase 2)
+
+- **Matrix:** one row per asset and engine, one column per check. The four wheeled checks share one
+  column that opens into four. A cell shows PASS, FAIL, `N/A`, error, running or waiting, as a
+  colour and a sign, never as a colour only.
+- **Each row:** the run's verdict, its seconds, and its highest margin.
+- **Filters:** only failed runs, one check, text in the asset name.
+- **A cell:** shows the check's detail line on hover. A click on a row opens the asset view.
+- **Live (phase 2):** for each running asset, the check and the step from `events.jsonl`, and the
+  time so far. Cancel one run, or the batch. A cancelled run has no `results.json`, and the batch
+  shows it as cancelled.
+- **Header:** counts by verdict, for the batch and for each check; total time; versions; a banner
+  when the settings are not the spec's.
+
+### 6.4 Asset view (phase 1)
+
+**Header:** asset name, file, SHA-256 (short, full on copy), variants, engine and its versions, tool
+and spec versions, seconds, verdict. The notes from `results.json` follow the header and are never
+folded away.
+
+**Joints**, when the results have measurements:
+
+- One row for each measurement, grouped by subject: the joint, the site, or the whole asset.
+- Sorted with failed measurements first, then by margin, highest first.
+- Columns: subject, check, case, value (deg or mm for a joint), limit, a margin bar, `ok`.
+- A margin above the "close" level gets a mark: it passes, but a small change in the asset or the
+  engine can make it fail. The level is 0.8 by default. It is a GUI setting, not a rule of the spec,
+  and it never changes a verdict. In Newton it matters most, because its results can differ from
+  run to run (spec.md section 5).
+
+**Checks:** each check with its title, verdict, detail line as written, measurements, and a link to
+its section of spec.md at the run's tool version:
+`https://github.com/proofmass/proofmass-check/blob/v<tool version>/docs/spec.md`. The `N/A` checks
+come last, each with its reason.
+
+**Results without measurements** (tool 0.2.0 and older): the screen shows the detail lines and says
+why there is no joints table.
+
+**Actions:** 3D view and inspector (phase 3), compare, copy the command line, open the folder.
+
+### 6.5 Inspector (phase 3)
+
+From `inspect`, so it works before a run and without an engine.
+
+- **Joints:** name, type, bodies, limits (deg or mm), rest position, drive (stiffness, damping, max
+  force) and where it comes from (PhysicsDriveAPI or MjcActuator), speed limit, mimic leader and
+  ratio, the D6 joint it came from. Filters: driven, passive, no limits, mimic.
+- **Load on a joint:** the mass it carries (the bodies `Asset.carried` gives) and the distance of
+  that mass's centre from the joint axis, next to the drive's max force. With these, a user can see
+  a fault like the G2's waist: 50 N m drives under 57 kg. The GUI shows the numbers and gives no
+  verdict on them.
+- **Bodies:** mass as given, or "the engine computes it"; number of colliders.
+- **Authored attributes** of each joint prim (section 5.3).
+- **Plan:** each check runs, or is `N/A` with its reason, marked "expected".
+
+### 6.6 3D view (phase 3)
+
+- **Colliders** from `inspect --geometry`: hulls and cylinders in the file pose. No render meshes:
+  the view shows what the engine collides, which is what the checks test.
+- **Joints:** pivot, axis, and the limits as an arc (revolute) or a segment (prismatic).
+- **Gripper site:** grasp centre, closing axis, and the GRIP box.
+- **Scene:** the floor at the run's floor height. For a wheeled robot, an arrow along +X.
+- **Colours:** a subject with a failed measurement in red, a close one in amber. A selection here
+  selects the same row in the joints table, and back.
+- `results.json` holds no poses, so the view shows the file pose only (section 10).
+
+### 6.7 Compare (phase 1)
+
+Two or more runs side by side: verdicts, and with measurements, the values and their differences.
+
+- **Same asset:** the GUI matches runs by the SHA-256 of the root file, and says so when it
+  differs. The hash does not cover the layers the root file references, so an equal hash does not
+  prove an equal asset. The GUI says that too.
+- **Different spec versions:** spec.md says that results of different spec versions are not
+  compared. The GUI shows them side by side, marks no differences, and says why.
+- **PhysX and Newton:** the usual case. Every Newton column carries the note "experimental: results
+  can differ from run to run".
+- **Newton repeats:** for each measurement, the lowest and highest value, and the verdicts counted
+  ("PASS in 3 of 5"). A verdict that differs between repeats gets a mark.
+
+### 6.8 Report (phase 1)
+
+- **Files:** one HTML file that holds its CSS and data, and opens without the GUI or a network. A
+  CSV with one row per run and check (verdict, detail), and one row per measurement when there are
+  measurements.
+- **Content:** versions, SHA-256, settings and their differences from the spec, notes, every
+  verdict with its detail, every `N/A` with its reason. The report leaves out nothing from
+  `results.json`, and adds no verdict of its own.
+- **Paths:** `results.json` holds the full path of the asset, which can hold a user name. The report
+  shows the file name only, unless the user asks for full paths.
+
+### 6.9 Settings (phase 2)
+
+The Python of each engine, with a button that tests it (section 4.1); the workspace; the "close"
+level for margins; one process per asset or one per batch.
+
+### 6.10 Experiments (open)
+
+In the audits, values were changed by hand and the asset run again: joint friction set to 0, a
+drive's max force times 100. proofmass-check never changes a setting to make a check pass, so such
+an experiment must stay apart from the checks. If it is built:
+
+- The change goes into a session layer over the asset. The file on disk never changes.
+- The results go into a folder marked as an experiment, with every change listed.
+- A report or a comparison never shows an experiment without that mark.
+
+Whether to build it, and where, is open (section 11).
+
+## 7. How results are shown
+
+- **Units:** degrees and millimetres for joints, as spec.md section 1 says for reports. m/s, kg, N
+  and N m elsewhere. The files stay in SI units, and the GUI converts only what it shows.
+- **Digits:** as many as the detail line gives for the same value. A failing value is never
+  rounded so that it looks equal to its limit.
+- **Verdicts:** a word or a sign together with a colour. `N/A` is grey, and never counts as a
+  failure.
+- **Newton:** the note from section 6.7 on every Newton run.
+- **Settings:** a banner on every screen of a run whose settings are not the spec's.
+- **Errors:** the error from `results.json`, and the last lines of `run.log`.
+- Light and dark themes. The matrix and the tables work with the keyboard.
+
+## 8. Phases
+
+| Phase | GUI | proofmass-check | Done when |
+|---|---|---|---|
+| 1. Viewer | server, batches, batch view, asset view, compare, report | 5.1 measurements. The viewer also works without them. | it opens the Lightwheel and AgiBot result folders, compares PhysX with Newton, and exports a report |
+| 2. Runner | new batch, live progress, settings | 5.2 events, 5.4 several assets | a batch of 10 assets runs from the GUI in PhysX and Newton, can be cancelled, and gives the same `results.json` as the command line |
+| 3. Inspector and 3D | inspector, 3D view | 5.3 inspect | the inspector shows the plan before a run, and the 3D view marks the joints that fail |
+| 4. Experiments | after the decision in section 11 | | |
+
+## 9. Tests
+
+- **Server:** pytest, in CI, without a GPU. The API, the token and Origin checks, which files it
+  serves, the workspace layout, and reading `results.json` with and without measurements.
+- **Fixtures:** `results.json` files from runs with `tests/fake_engine.py`, one run that stopped
+  with an error, and one where every check is `N/A`.
+- **Workers:** a fake Python command that writes events and results, so no engine is needed.
+- **Changes in section 5:** unit tests as for any change, and the GPU tests for 5.4.
+- **Front end:** open (section 11).
+
+## 10. Not in this design
+
+- Editing the USD, or fixing an asset.
+- A replay of the simulation. `results.json` holds no poses, so it would need a new output.
+- Engines in the browser. proofmass-lab runs MuJoCo in the browser for lessons, not for checks.
+- An Isaac Sim extension. It would tie the GUI to PhysX.
+- Shared or remote use.
+
+## 11. Open decisions
+
+| Decision | Options | Recommendation |
+|---|---|---|
+| Which user comes first | the auditor, or the asset maker | the auditor. The batch view and compare serve both users, and the audits are the work done now. |
+| Experiments | in this package, in proofmass-lab, or not at all | decide before phase 4 |
+| The command's name | `gui`, `view` or `serve` | `gui` |
+| Front-end tests | Playwright (adds Node to the tools for development), or by hand | by hand in phase 1, then decide |
+| Public reports | the report of section 6.8 is also the template for reports on proofmass.com, or not | decide in phase 1 |
