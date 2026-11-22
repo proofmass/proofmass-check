@@ -85,9 +85,19 @@ proofmass-check list-checks
 
 Several assets run in one start of the engine, which saves the start of Isaac Sim for each. The
 exit status is 0 when no check failed, 1 when a check failed, and 2 when the run could not
-finish. With several assets, it is the highest of theirs. `results.json` holds every verdict and number, the versions of the tool, the spec and the
-engine, and the SHA-256 of the asset file.
+finish. With several assets, it is the highest of theirs. `results.json` holds every verdict and
+number, the versions of the tool, the spec and the engine, and the SHA-256 of the asset file.
 [src/proofmass_check/results.schema.json](src/proofmass_check/results.schema.json) describes it.
+
+To see what the checks will read and which of them will run, before a run and without an engine:
+
+```bash
+proofmass-check inspect path/to/asset.usd --engine newton
+```
+
+It prints JSON: the plan with the reason for each `N/A`, the joints with their drives and the mass
+they carry, and the attributes written on each joint prim. It needs pxr, so run it in a Python
+with `proofmass-check[usd]`, not in Isaac Sim's.
 
 ## See the results
 
@@ -101,7 +111,9 @@ one version with another, or two folders. It saves a report as one HTML file or 
 
 The page also runs checks. In its settings, give the Python of each engine once. A new batch then
 runs the assets you tick in the engines you choose, one run at a time, and shows each check as it
-runs. The page itself runs in any Python that has proofmass-check, without an engine.
+runs. Its inspector shows an asset before a run: the plan, the joints, and a 3D view of the
+colliders with the joints that failed marked. The page itself runs in any Python that has
+proofmass-check, without an engine.
 [docs/gui.md](docs/gui.md) describes it.
 
 ## How a run works

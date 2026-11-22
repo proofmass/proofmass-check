@@ -114,6 +114,36 @@ def read_asset(file: str | Path, variants: Mapping[str, str] | None = None) -> A
     )
 
 
+def variant_sets(file: str | Path) -> dict[str, list[str]]:
+    """The variant sets of the default prim, each with its variants."""
+    stage = _open_stage(file)  # keep the stage: its prims become invalid when it is freed
+    sets = stage.GetDefaultPrim().GetVariantSets()
+    return {name: list(sets.GetVariantSet(name).GetVariantNames()) for name in sets.GetNames()}
+
+
+def authored(file: str | Path, variants: Mapping[str, str], paths: Iterable[str], longest: int = 160) -> dict:
+    """The applied schemas and authored attributes of some prims, as text, with variants selected.
+
+    For a person who looks for a value the reader does not use, such as physxJoint:jointFriction,
+    or a drive instance an engine does not read. A long value is cut to `longest` characters.
+    """
+    stage = _open_stage(file)
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        for name, value in variants.items():
+            stage.GetDefaultPrim().GetVariantSet(name).SetVariantSelection(value)
+    found = {}
+    for path in paths:
+        prim = stage.GetPrimAtPath(path)
+        if not prim:
+            continue
+        attributes = {}
+        for attr in prim.GetAuthoredAttributes():
+            text = str(attr.Get())
+            attributes[attr.GetName()] = text if len(text) <= longest else text[: longest - 1] + "…"
+        found[path] = {"schemas": list(prim.GetAppliedSchemas()), "attributes": attributes}
+    return found
+
+
 def _open_stage(file: str | Path) -> Usd.Stage:
     stage = Usd.Stage.Open(str(file))
     if not stage:
@@ -309,6 +339,7 @@ def _read_joint(prim: Usd.Prim, stage: Usd.Stage, cache: UsdGeom.XformCache, bod
         "local_pos1": side1.position,
         "local_rot1": side1.rotation,
         "mimic": _mimic(prim),
+        "prim": str(prim.GetPath()),
     }
     type_name = prim.GetTypeName()
     if type_name in ("PhysicsRevoluteJoint", "PhysicsPrismaticJoint"):

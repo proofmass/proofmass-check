@@ -188,6 +188,7 @@ async function route() {
     else if (parts[0] === 'b') await batchView(parts[1]);
     else if (parts[0] === 'settings') await settingsView();
     else if (parts[0] === 'new') await newBatchView();
+    else if (parts[0] === 'inspect') await inspectView(JSON.parse(parts[1]));
     else if (parts[0] === 'compare') await compareView(JSON.parse(parts[1]));
     else if (parts[0] === 'pair') await pairView(parts[1], parts[2]);
     else await homeView();
@@ -414,6 +415,9 @@ async function runView(folderId, runId) {
   fill(main,
     h('h1', {}, d.asset, result(d, true), h('span', {class: 'sub'}, d.engine)),
     h('div', {class: 'toolbar'}, tick,
+      h('a', {class: 'button', href: inspectHref({file: d.file, engine: ['physx', 'newton'].includes(d.engine) ? d.engine : 'physx',
+        variants: Object.entries(d.variants).map(([k, v]) => `${k}=${v}`), floor: d.settings.floor !== null, run: [folderId, runId]})},
+        'Inspect the asset'),
       h('button', {onclick: () => download([[folderId, runId]], 'html', `${d.asset}-${d.engine}`, say.say)}, 'Save HTML'),
       h('button', {onclick: () => download([[folderId, runId]], 'csv', `${d.asset}-${d.engine}`, say.say)}, 'Save CSV')),
     say,
@@ -724,6 +728,7 @@ async function newBatchView() {
         h('td', {class: 'c'}, h('input', {type: 'checkbox', checked: f.ticked, 'aria-label': `Tick ${f.name}`,
           onchange: e => { f.ticked = e.target.checked; drawFiles(); update(); }})),
         h('td', {class: 'mono'}, f.name),
+        h('td', {}, h('a', {href: inspectHref({file: f.path, engine: (engineBoxes.find(e => e.box.checked) || {name: 'physx'}).name})}, 'Inspect')),
         h('td', {class: 'num'}, `${(f.size / 1024).toFixed(0)} kB`)))))) : null,
       shown.length > 500 ? h('p', {class: 'sub'}, `${shown.length - 500} more: filter to see them.`) : null);
   }
@@ -776,6 +781,148 @@ async function newBatchView() {
     say);
   where.focus();
   update();
+}
+
+// --- the inspector: an asset before a run, without an engine (docs/gui.md, sections 5.3, 6.5 and 6.6)
+
+const inspectHref = spec => `#/inspect/${encodeURIComponent(JSON.stringify(spec))}`;
+const EXPECTED_NOTE = 'This plan is expected, not certain: LOAD decides whether the other checks run, '
+  + 'and Newton runs DROP only when it builds a free joint. A run shows the real plan.';
+
+function number(value) {
+  if (value === null || value === undefined) return '';
+  return Number(value.toPrecision(3)).toLocaleString('en-US', {maximumFractionDigits: 6});
+}
+
+function position(joint, value) {
+  // A joint position as people read it: degrees for a revolute joint, millimetres for a prismatic one.
+  if (value === null || value === undefined) return 'none';
+  return joint.kind === 'revolute' ? `${(value * 180 / Math.PI).toFixed(1)} deg` : `${(value * 1000).toFixed(1)} mm`;
+}
+
+function driveText(joint) {
+  const d = joint.drive;
+  if (!d) return h('span', {class: 'muted'}, 'none');
+  const r = joint.kind === 'revolute';
+  const parts = [`k ${number(d.stiffness)} ${r ? 'N m/rad' : 'N/m'}`, `d ${number(d.damping)} ${r ? 'N m s/rad' : 'N s/m'}`,
+    d.max_force === null ? 'no force limit' : `max ${number(d.max_force)} ${r ? 'N m' : 'N'}`];
+  return h('span', {}, parts.join(' · '), h('div', {class: 'muted'}, joint.drive_from));
+}
+
+function speedLimit(joint) {
+  if (joint.max_speed === null) return h('span', {class: 'muted'}, 'none');
+  return joint.kind === 'revolute' ? `${number(joint.max_speed * 180 / Math.PI)} deg/s` : `${number(joint.max_speed)} m/s`;
+}
+
+function loadText(joint) {
+  if (joint.gravity_load === null) return '';
+  const unit = joint.kind === 'revolute' ? 'N m' : 'N';
+  const force = joint.drive && joint.drive.max_force !== null ? ` / ${number(joint.drive.max_force)}` : '';
+  return `${number(joint.gravity_load)}${force} ${unit}`;
+}
+
+async function inspectView(spec) {
+  const mine = viewNumber;
+  crumbs(['Inspect', null]);
+  fill(main, h('h1', {}, 'Inspect'), h('p', {class: 'status'}, `Reading ${spec.file}. A large stage can take a while.`));
+  const engine = spec.engine || 'physx';
+  const d = await apiJson('/api/inspect', {file: spec.file, engine, variants: spec.variants || [], floor: spec.floor !== false});
+  const marks = {};
+  let runName = null;
+  if (spec.run) {
+    try {
+      const r = await apiJson(`/api/run?folder=${encodeURIComponent(spec.run[0])}&run=${encodeURIComponent(spec.run[1])}`);
+      runName = `${r.asset} · ${r.engine}`;
+      for (const m of r.measurements) {
+        if (!m.subject) continue;
+        if (!m.ok) marks[m.subject] = 'fail';
+        else if (m.margin !== null && m.margin >= CLOSE && marks[m.subject] !== 'fail') marks[m.subject] = 'close';
+      }
+    } catch { /* the run's folder is not open any more: the view shows no marks */ }
+  }
+  if (mine !== viewNumber) return;
+  crumbs(['Inspect', null], [d.name, null]);
+
+  const rows = new Map();
+  let viewer = null;
+  const pick = name => {
+    for (const [n, row] of rows) row.classList.toggle('picked', n === name);
+    if (viewer) viewer.select(name);
+    const row = rows.get(name);
+    if (row) row.scrollIntoView({block: 'nearest'});
+  };
+  const canvas = h('canvas', {class: 'viewer', role: 'img', 'aria-label': `The colliders and joints of ${d.name} in 3D`});
+  const sets = Object.entries(d.variant_sets);
+  const byPath = Object.fromEntries(d.bodies.map(b => [b.path, b.name]));
+  const moving = d.joints.filter(j => j.kind !== 'fixed');
+  const marked = Object.values(marks).filter(m => m === 'fail').length;
+
+  const jointRows = d.joints.map(j => {
+    const row = h('tr', {class: j.kind === 'fixed' ? 'muted' : null, onclick: () => pick(j.name), title: j.prim},
+      h('td', {class: 'mono'}, marks[j.name] ? sign(marks[j.name] === 'fail' ? 'FAIL' : 'PASS',
+        marks[j.name] === 'fail' ? 'a measurement of this joint failed' : 'close to a limit') : null, ' ', j.name),
+      h('td', {}, j.kind, j.d6 ? h('div', {class: 'muted'}, `axis of ${j.d6}`) : null),
+      h('td', {class: 'mono'}, byPath[j.body1] || j.body1 || 'world', h('div', {class: 'muted'}, `on ${byPath[j.body0] || j.body0 || 'world'}`)),
+      h('td', {class: 'num'}, j.kind === 'fixed' ? '' : `${position(j, j.lower)} to ${position(j, j.upper)}`),
+      h('td', {class: 'num'}, j.kind === 'fixed' ? '' : position(j, j.rest)),
+      h('td', {}, j.kind === 'fixed' ? '' : driveText(j)),
+      h('td', {class: 'num'}, j.kind === 'fixed' ? '' : speedLimit(j)),
+      h('td', {class: 'num'}, j.carried_mass === null ? '' : `${number(j.carried_mass)} kg`,
+        j.lever !== null ? h('div', {class: 'muted'}, `${number(j.lever * 1000)} mm from the axis`) : null),
+      h('td', {class: 'num'}, loadText(j)),
+      h('td', {class: 'mono'}, j.mimic ? `${j.mimic.leader} × ${number(j.mimic.ratio)}` : ''));
+    rows.set(j.name, row);
+    return row;
+  });
+
+  fill(main,
+    h('h1', {}, d.name, h('span', {class: 'seg'}, ['physx', 'newton'].map(e =>
+      h('a', {class: e === engine ? 'on' : null, href: inspectHref({...spec, engine: e})}, e)))),
+    h('p', {class: 'sub'}, h('span', {class: 'mono'}, d.file)),
+    h('p', {class: 'sub'}, `${d.bodies.length} bodies · ${moving.length} moving joint${moving.length === 1 ? '' : 's'} · `,
+      d.articulated ? 'an articulation' : 'no PhysicsArticulationRootAPI', ' · ',
+      d.world_fixed.length ? `fixed to the world by ${d.world_fixed.join(', ')}` : 'free', ' · ',
+      typeof d.floor === 'number' ? `floor at ${(d.floor * 1000).toFixed(1)} mm` : 'no floor',
+      sets.length ? ` · variants ${Object.entries(d.variants).map(([k, v]) => `${k}=${v}`).join(' ') || 'none selected'}` : ''),
+    sets.length ? h('p', {class: 'sub'}, 'Variant sets: ', sets.map(([k, vs]) => `${k} (${vs.join(', ')})`).join('; ')) : null,
+    runName ? banner(`Joints are marked by the measurements of the run ${runName}: ${marked} failed. `
+      + 'Red: a measurement failed. Amber: it passed close to its limit.', true) : null,
+    canvas,
+    h('p', {class: 'sub'}, 'Drag to turn, Shift+drag to move, the wheel to zoom, double-click to reset. '
+      + 'Click a joint here or in the table to find it. The view shows the colliders, which are what the engine collides.'),
+    h('h2', {}, 'Plan', h('span', {class: 'muted'}, `for ${engine}`)),
+    banner(EXPECTED_NOTE, true),
+    h('div', {class: 'scroll'}, h('table', {}, h('tbody', {}, d.plan.map(p => h('tr', {},
+      h('td', {class: 'mono'}, p.id),
+      h('td', {}, p.runs ? h('span', {class: 'badge'}, 'runs') : h('span', {class: 'v na'}, 'N/A')),
+      h('td', {}, p.title, p.reason ? h('div', {class: 'muted'}, p.reason) : null)))))),
+    d.notes.length ? h('ul', {class: 'notes banner'}, d.notes.map(n => h('li', {}, n))) : null,
+    h('h2', {}, 'Joints', h('span', {class: 'muted'}, 'click a row to find it in 3D')),
+    h('div', {class: 'scroll'}, h('table', {class: 'joints'},
+      h('thead', {}, h('tr', {}, ['Joint', 'Type', 'Moves', 'Limits', 'Rest', 'Drive', 'Speed limit', 'Carries',
+        'Gravity load / max force', 'Follows'].map(t => h('th', {}, t)))),
+      h('tbody', {}, jointRows))),
+    h('p', {class: 'sub'}, 'The gravity load is the largest torque or force that gravity puts on the joint, from the mass it carries. '
+      + 'It is the number PASSIVE starts its push from. The page shows it next to the drive\'s max force, and decides nothing from it.'),
+    h('h2', {}, 'Bodies'),
+    h('div', {class: 'scroll'}, h('table', {}, h('thead', {}, h('tr', {}, ['Body', 'Path', 'Mass', 'Colliders'].map(t => h('th', {}, t)))),
+      h('tbody', {}, d.bodies.map(b => h('tr', {},
+        h('td', {class: 'mono'}, b.name, b.path === d.root_body ? h('span', {class: 'muted'}, ' root') : null),
+        h('td', {class: 'mono muted'}, b.path),
+        h('td', {class: 'num'}, b.mass === null ? h('span', {class: 'muted'}, 'the engine computes it') : `${number(b.mass)} kg`),
+        h('td', {class: 'num'}, b.colliders)))))),
+    d.sites.length ? [h('h2', {}, 'Gripper sites'), h('div', {class: 'scroll'}, h('table', {},
+      h('thead', {}, h('tr', {}, ['Site', 'Body', 'Max opening', 'Pad', 'Payload'].map(t => h('th', {}, t)))),
+      h('tbody', {}, d.sites.map(s => h('tr', {}, h('td', {class: 'mono'}, s.name), h('td', {class: 'mono'}, byPath[s.body] || s.body || ''),
+        h('td', {class: 'num'}, `${number(s.opening * 1000)} mm`), h('td', {class: 'num'}, `${number(s.pad * 1000)} mm`),
+        h('td', {class: 'num'}, s.payload === null ? 'none' : `${number(s.payload)} kg`))))))] : null,
+    d.wheeled ? [h('h2', {}, 'Wheels'), h('p', {}, `${d.wheeled.drive} drive · track ${number(d.wheeled.track * 1000)} mm · `
+      + `wheel radius ${number(d.wheeled.radius * 1000)} mm · ${d.wheeled.wheels.map(w => `${w.name} (${w.side}${w.driven ? ', driven' : ''})`).join(', ')}`)] : null,
+    h('h2', {}, 'Attributes of the joint prims', h('span', {class: 'muted'}, 'as written in the file, also the ones the checks do not read')),
+    d.joints.map(j => h('details', {},
+      h('summary', {}, h('span', {class: 'mono'}, j.name), ` · ${j.prim} · ${j.schemas.join(', ') || 'no applied schemas'}`),
+      h('div', {class: 'attributes'}, Object.entries(j.attributes).map(([k, v]) => `${k} = ${v}`).join('\n') || 'no authored attributes'))));
+  viewer = makeViewer(canvas, d, marks, pick);
 }
 
 window.addEventListener('hashchange', () => { viewNumber += 1; route(); window.scrollTo(0, 0); });

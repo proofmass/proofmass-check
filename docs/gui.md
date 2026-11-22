@@ -1,7 +1,7 @@
 # proofmass-check GUI: design
 
-Version 0.3 (draft). Phases 1 and 2, the viewer and the runner, are built (section 8). The rest
-is not built yet. This file says what the GUI does, how it is built, and what must change in
+Version 0.4 (draft). Phases 1 to 3, the viewer, the runner and the inspector, are built
+(section 8). Experiments are not. This file says what the GUI does, how it is built, and what must change in
 proofmass-check before it. [spec.md](spec.md) stays the authority for the checks: the GUI shows
 what the checks decide, and never decides itself.
 
@@ -65,8 +65,8 @@ browser --HTTP, 127.0.0.1--> proofmass-check gui            any Python 3.11+ wit
 - The server uses the standard library only: `http.server`, `subprocess`, `json`. The package keeps
   numpy as its only dependency.
 - The front end is static HTML, CSS and JavaScript in `src/proofmass_check/gui/static/`, with no
-  build step. three.js, for the 3D view, is a file in that folder, with its MIT licence next to it
-  and in NOTICE.
+  build step and no library of others. The 3D view (`viewer3d.js`) draws the colliders' triangles
+  from far to near on a 2D canvas, which is enough for convex hulls of a few dozen faces.
 - Engines run only in workers. The server never imports pxr, isaacsim or newton, because each
   engine needs its own Python (README, "Engines"), and in Isaac Sim pxr exists only after Isaac
   Sim has started.
@@ -205,7 +205,8 @@ also have `asset`, its file as the command line gave it.
 proofmass-check inspect path/to/asset.usd --engine physx --variant SET=VALUE --geometry
 ```
 
-It prints, as JSON, what the reader read and the plan, without starting an engine.
+Built in phase 3 (`inspection.py`). It prints, as JSON, what the reader read and the plan,
+without starting an engine. `--out FILE` writes the JSON to a file.
 
 - **What it gives:** the variant sets with their values and the ones selected; bodies (path, mass
   or none, centre of mass, pose, and with `--geometry` the colliders); joints (every field of
@@ -215,11 +216,14 @@ It prints, as JSON, what the reader read and the plan, without starting an engin
   text. This shows values the reader does not use, such as `physxJoint:jointFriction`, or a drive
   instance that PhysX does not read (`PhysicsDriveAPI:X`). Both caused failures in the Lightwheel
   set.
-- **The plan without an engine:** the plan needs the engine's `supported` set. Today that is a
-  property of a started engine, and `engines/physx.py` imports isaacsim at the top. The part that
-  depends only on the asset moves to a module that imports no engine: PhysX runs only LOAD, DROP
-  and PASSIVE on an asset without PhysicsArticulationRootAPI, and Newton does not run SPEED,
-  STAND, DRIVE, TURN and STEER.
+- **The plan without an engine:** the plan needs the engine's `supported` set, and
+  `engines/physx.py` imports isaacsim at the top. So what depends only on the asset is in
+  `engines/capabilities.py`, which imports no engine, and the engines take it from there: PhysX
+  runs only LOAD, DROP and PASSIVE on an asset without PhysicsArticulationRootAPI, and Newton does
+  not run SPEED, STAND, DRIVE, TURN and STEER. The variant sets each engine reads, and whether it
+  reads MjcActuator, are there too.
+- **In the GUI:** the server runs inspect as a process of its own, never in its own process: in
+  the GUI's Python when it has pxr, else in Newton's Python. It keeps the last 8 inspections.
 - **What only the engine knows:** two things are known only after the engine builds the asset.
   In Newton, DROP needs a free joint. And an engine can have joints it cannot drive or measure one
   by one (`LoadOutcome.not_addressable`). So inspect calls its plan "expected", and the GUI shows
@@ -315,30 +319,37 @@ why there is no joints table.
 
 **Actions:** 3D view and inspector (phase 3), compare, copy the command line, open the folder.
 
-### 6.5 Inspector (phase 3)
+### 6.5 Inspector (phase 3, built)
 
-From `inspect`, so it works before a run and without an engine.
+From `inspect`, so it works before a run and without an engine. It opens from the page of a run
+("Inspect the asset", with the run's engine, variants and floor) and from each file of a new batch.
+A switch shows the plan for PhysX or for Newton.
 
 - **Joints:** name, type, bodies, limits (deg or mm), rest position, drive (stiffness, damping, max
   force) and where it comes from (PhysicsDriveAPI or MjcActuator), speed limit, mimic leader and
-  ratio, the D6 joint it came from. Filters: driven, passive, no limits, mimic.
+  ratio, the D6 joint it came from. Not built yet: filters (driven, passive, no limits, mimic).
 - **Load on a joint:** the mass it carries (the bodies `Asset.carried` gives) and the distance of
-  that mass's centre from the joint axis, next to the drive's max force. With these, a user can see
-  a fault like the G2's waist: 50 N m drives under 57 kg. The GUI shows the numbers and gives no
+  that mass's centre from the joint axis, and the largest gravity load, next to the drive's max
+  force. The gravity load is the term PASSIVE starts its push from. With these, a user can see a
+  fault like the G2's waist: 50 N m drives under 57 kg. The GUI shows the numbers and gives no
   verdict on them.
 - **Bodies:** mass as given, or "the engine computes it"; number of colliders.
 - **Authored attributes** of each joint prim (section 5.3).
 - **Plan:** each check runs, or is `N/A` with its reason, marked "expected".
 
-### 6.6 3D view (phase 3)
+### 6.6 3D view (phase 3, built)
 
 - **Colliders** from `inspect --geometry`: hulls and cylinders in the file pose. No render meshes:
   the view shows what the engine collides, which is what the checks test.
-- **Joints:** pivot, axis, and the limits as an arc (revolute) or a segment (prismatic).
-- **Gripper site:** grasp centre, closing axis, and the GRIP box.
-- **Scene:** the floor at the run's floor height. For a wheeled robot, an arrow along +X.
-- **Colours:** a subject with a failed measurement in red, a close one in amber. A selection here
-  selects the same row in the joints table, and back.
+- **Joints:** pivot and axis. Not built yet: the limits as an arc (revolute) or a segment
+  (prismatic).
+- **Gripper site:** the closing axis through the grasp centre. Not built yet: the GRIP box.
+- **Scene:** the floor as a grid at the run's floor height, and the world axes in a corner. Not
+  built yet: an arrow along +X for a wheeled robot.
+- **Colours:** opened from a run, a joint with a failed measurement in red, a close one in amber,
+  and the body it moves tinted the same. A click on a joint selects its row in the joints table,
+  and a click on a row selects the joint.
+- **Moving the view:** drag to turn, Shift+drag to move, the wheel to zoom, double-click to reset.
 - `results.json` holds no poses, so the view shows the file pose only (section 10).
 
 ### 6.7 Compare (phase 1)
@@ -407,8 +418,9 @@ Whether to build it, and where, is open (section 11).
 | 3. Inspector and 3D | inspector, 3D view | 5.3 inspect | the inspector shows the plan before a run, and the 3D view marks the joints that fail |
 | 4. Experiments | after the decision in section 11 | | |
 
-Phases 1 and 2 are built. Phase 2 was tested with a fake worker (section 9). Its "done when", a
-batch of 10 assets in PhysX and Newton, is still to run on the real engines.
+Phases 1 to 3 are built. Phase 2 was tested with a fake worker (section 9). Its "done when", a
+batch of 10 assets in PhysX and Newton, is still to run on the real engines. Phase 3 was tested on
+the test assets of `tests/usd_assets.py`, not yet on a large package such as the G2.
 
 ## 9. Tests
 

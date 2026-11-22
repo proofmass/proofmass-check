@@ -118,6 +118,7 @@ class Joint:
     mjc_drive: Drive | None = None  # the drive its MjcActuator gives, for an engine that reads one
     mimic: Mimic | None = None
     d6: str | None = None
+    prim: str = ""  # the path of the joint's prim in the stage, for a person who looks for it
 
     @property
     def revolute(self) -> bool:
