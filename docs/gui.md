@@ -1,8 +1,9 @@
 # proofmass-check GUI: design
 
-Version 0.2 (draft). Phase 1, the viewer, is built (section 8). The rest is not built yet. This
-file says what the GUI does, how it is built, and what must change in proofmass-check before it. [spec.md](spec.md) stays the authority for the
-checks: the GUI shows what the checks decide, and never decides itself.
+Version 0.3 (draft). Phases 1 and 2, the viewer and the runner, are built (section 8). The rest
+is not built yet. This file says what the GUI does, how it is built, and what must change in
+proofmass-check before it. [spec.md](spec.md) stays the authority for the checks: the GUI shows
+what the checks decide, and never decides itself.
 
 ## 1. Goal
 
@@ -58,7 +59,9 @@ browser --HTTP, 127.0.0.1--> proofmass-check gui            any Python 3.11+ wit
                                  '-- worker: <a Python with pxr>  -m proofmass_check inspect ...  no engine
 ```
 
-- `proofmass-check gui [WORKSPACE]` starts a local HTTP server and opens the browser.
+- `proofmass-check gui [FOLDER ...] [--workspace DIR]` starts a local HTTP server and opens the
+  browser. The folders open as results folders. `--workspace` gives the workspace for this session
+  only, in place of the one in the settings.
 - The server uses the standard library only: `http.server`, `subprocess`, `json`. The package keeps
   numpy as its only dependency.
 - The front end is static HTML, CSS and JavaScript in `src/proofmass_check/gui/static/`, with no
@@ -101,17 +104,21 @@ The server starts processes, so a web page open in the same browser must not rea
 
 ```
 <workspace>/
-  2026-11-22_1405_lightwheel/             a batch: date, time, name
-    batch.json                            assets, engines, settings, each worker's Python and versions
+  2026-11-22_140512_lightwheel/           a batch: date, time, name
+    batch.json                            assets, engines, settings, each run's Python and its version
+    physx/events-1.jsonl                  the progress of the run's first worker (section 5.2)
+    physx/log-1.txt                       that worker's stdout and stderr
     physx/Dishwasher036/results.json      as the command line writes it
-    physx/Dishwasher036/events.jsonl      the progress of the run (section 5.2)
-    physx/Dishwasher036/run.log           the worker's stdout and stderr
-    newton/Dishwasher036/...
+    newton/..., newton-2/...              a run for each engine, and for each repeat in Newton
 ```
 
-- An asset's folder has the name of its root file without the extension. When two assets of a
-  batch have the same name, the folder is the file's path below the folder the batch's assets
-  share.
+- A run is one engine, or one repeat in Newton. A worker is one process of `run` with the assets
+  the run still needs. A second worker of a run, after a crash, writes `events-2.jsonl` and
+  `log-2.txt`.
+- An asset's folder has the name of its root file without the extension. So two assets of one
+  name cannot be in one batch: the GUI and `run` both say so.
+- The GUI reads the state of a batch only from these files, so it can read it again after a
+  restart. Only whether a worker runs now is kept in memory.
 - A batch folder does not change after the batch ends. To run again, start a new batch.
 - The GUI also opens any folder that holds results files, read-only, for example results made
   before the GUI existed. A results file is any JSON file whose `tool.name` is `proofmass-check`,
@@ -166,19 +173,25 @@ Each check result has an optional `measurements` array. `detail` stays as it is.
 
 ### 5.2 Progress events
 
-In the Lightwheel batch, one run took 10 s to 54 s, without the start of Isaac Sim. The command
-prints its results only at the end. A new option, `--events FILE`, writes JSON Lines as the run
-goes: one object per line, flushed after each line.
+Built in phase 2. In the Lightwheel batch, one run took 10 s to 54 s, without the start of Isaac
+Sim, and the command prints its results only at the end. The option `--events FILE` writes JSON
+Lines as the run goes: one object per line, flushed after each line (`events.py`).
+
+Every event has `event` and `t`, the seconds since the command started. The events of one asset
+also have `asset`, its file as the command line gave it.
 
 | Event | Fields |
 |---|---|
-| `start` | asset file, engine, tool and spec versions |
-| `engine` | engine versions, and the seconds the engine took to start |
-| `plan` | the checks that run, and each `N/A` with its reason |
-| `check` | check ID, when the check starts |
-| `step` | check ID, the number of engine operations done, and the number expected when the plan knows it |
-| `result` | check ID and verdict |
-| `end` | passed, seconds and the path of `results.json`, or the error |
+| `start` | the asset files, the engine, the tool and spec versions |
+| `engine` | the engine's versions, and the seconds it took to start |
+| `error` | why the engine did not start. `exit` follows. |
+| `asset` | an asset starts |
+| `check` | a check starts: its ID, and `total`, the engine operations it makes, when the plan knows it |
+| `plan` | after LOAD: the checks that will run (`runs`), and each other one with its reason (`skip`) |
+| `step` | the check ID, the engine operations done, and `total` |
+| `result` | a check's ID and verdict |
+| `end` | an asset ends: passed, failed, seconds and the path of `results.json`, or the error |
+| `exit` | the command's exit status, just before the engine closes |
 
 - `step` comes from a wrapper around the engine that counts its operations (settle, move, push).
   The checks do not change. When the plan cannot know the count, `step` has no total: PASSIVE, for
@@ -214,33 +227,35 @@ It prints, as JSON, what the reader read and the plan, without starting an engin
 
 ### 5.4 Several assets in one run
 
-Each run starts the engine and closes it, and PhysX ends the process when it closes. Isaac Sim can
-take a minute to start the first time (`engines/__init__.py`). So a batch of 10 assets starts Isaac
-Sim 10 times.
+Built in phase 2. Each run started the engine and closed it, and PhysX ends the process when it
+closes. Isaac Sim can take a minute to start the first time (`engines/__init__.py`). So a batch of
+10 assets started Isaac Sim 10 times.
 
 `run` takes several assets: `proofmass-check run a.usd b.usd --out DIR` writes
-`DIR/<asset>/results.json`. The engine starts once. `Engine.open()` already loads a new asset into
-the same engine.
+`DIR/<asset>/results.json`. With one asset, `--out DIR` still writes `DIR/results.json`. The engine
+starts once. `Engine.open()` loads each asset into the same engine.
 
-- Each `results.json` must be the same as from a run of that asset alone. A GPU test runs two
-  assets both ways and compares the files, except for `seconds`.
+- A run must not depend on the asset before it. A GPU test runs an asset, another one, and the
+  first again, and compares the results (in Newton, the verdicts only).
+- An asset that stops with an error gets `results.json` with the error, and the next asset runs.
 - The exit status is the highest status of its runs.
-- The GUI can still start one process per asset (a setting), so that a crash in one asset does not
-  stop the rest. When a worker stops in the middle of a batch, the GUI marks that asset as an error
-  and starts a new worker at the next asset.
+- Two assets of one file name are refused: their folders would be the same.
+- When a worker stops in the middle of an asset, as an engine that crashes does, the GUI marks
+  that asset as stopped and starts a new worker with the assets that are left.
 
 ## 6. Screens
 
 The phase of each screen is in brackets (section 8).
 
-### 6.1 Batches (phase 1)
+### 6.1 Batches (phases 1 and 2)
 
-The batches in the workspace and the folders the user opened: name, date, engines, number of
-assets, passed, failed and error, and the tool and spec versions.
+The batches in the workspace, the newest first: name, date, engines, number of assets, passed,
+failed and error. Below them, the folders the user opened.
 
-Actions: open a batch, compare two batches, export a report, start a new batch (phase 2).
+Actions: open a batch, start a new batch, open a folder. Compare two folders and save a report from
+the matrix of a folder.
 
-### 6.2 New batch (phase 2)
+### 6.2 New batch (phase 2, built)
 
 - **Assets:** a file or a folder. The GUI lists the USD files it finds, and the user ticks the root
   files. It does not guess which file is the root.
@@ -253,8 +268,10 @@ Actions: open a batch, compare two batches, export a report, start a new batch (
   says that the settings differ from the spec.
 - **The command:** the command line each worker will run, to copy, so a run from the GUI can be
   repeated without it.
+- **Start:** the GUI tests each engine's Python again, writes `batch.json`, and queues the runs.
+  One worker runs at a time, in the order of the runs, because each engine needs the GPU.
 
-### 6.3 Batch view (phase 1; live in phase 2)
+### 6.3 Batch view (phase 1; live in phase 2, built)
 
 - **Matrix:** one row per asset and engine, one column per check. The four wheeled checks share one
   column that opens into four. A cell shows PASS, FAIL, `N/A`, error, running or waiting, as a
@@ -262,9 +279,12 @@ Actions: open a batch, compare two batches, export a report, start a new batch (
 - **Each row:** the run's verdict, its seconds, and its highest margin.
 - **Filters:** only failed runs, one check, text in the asset name.
 - **A cell:** shows the check's detail line on hover. A click on a row opens the asset view.
-- **Live (phase 2):** for each running asset, the check and the step from `events.jsonl`, and the
-  time so far. Cancel one run, or the batch. A cancelled run has no `results.json`, and the batch
-  shows it as cancelled.
+- **Live (phase 2):** above the matrix, a table of the batch's assets and runs. A running asset
+  shows its check, the step of that check from the events, and the time so far. An ended asset
+  links to its page. Cancel one run, or the batch: the asset a worker is on gets no
+  `results.json`. The log of each run's newest worker, and the command of each run, open below.
+  When an asset ends, the matrix is read again.
+- **When the GUI closes:** it stops the worker that runs, so no engine runs on without it.
 - **Header:** counts by verdict, for the batch and for each check; total time; versions; a banner
   when the settings are not the spec's.
 
@@ -346,10 +366,12 @@ Two or more runs side by side: verdicts, and with measurements, the values and t
 - **Paths:** `results.json` holds the full path of the asset, which can hold a user name. The report
   shows the file name only, unless the user asks for full paths.
 
-### 6.9 Settings (phase 2)
+### 6.9 Settings (phase 2, built)
 
-The Python of each engine, with a button that tests it (section 4.1); the workspace; the "close"
-level for margins; one process per asset or one per batch.
+The Python of each engine, with a button that saves and tests it (section 4.1), and the workspace.
+A note says that Isaac Sim asks for its licence the first time it starts, and that the GUI never
+accepts it: the user starts Isaac Sim once in a terminal. The "close" level for margins is fixed
+at 0.8 for now.
 
 ### 6.10 Experiments (open)
 
@@ -385,13 +407,17 @@ Whether to build it, and where, is open (section 11).
 | 3. Inspector and 3D | inspector, 3D view | 5.3 inspect | the inspector shows the plan before a run, and the 3D view marks the joints that fail |
 | 4. Experiments | after the decision in section 11 | | |
 
+Phases 1 and 2 are built. Phase 2 was tested with a fake worker (section 9). Its "done when", a
+batch of 10 assets in PhysX and Newton, is still to run on the real engines.
+
 ## 9. Tests
 
 - **Server:** pytest, in CI, without a GPU. The API, the token and Origin checks, which files it
   serves, the workspace layout, and reading `results.json` with and without measurements.
 - **Fixtures:** `results.json` files from runs with `tests/fake_engine.py`, one run that stopped
   with an error, and one where every check is `N/A`.
-- **Workers:** a fake Python command that writes events and results, so no engine is needed.
+- **Workers:** `tests/fake_worker.py` writes events and results as `run` does, so no engine is
+  needed. It can crash in the middle of an asset, or wait to be cancelled.
 - **Changes in section 5:** unit tests as for any change, and the GPU tests for 5.4.
 - **Front end:** open (section 11).
 

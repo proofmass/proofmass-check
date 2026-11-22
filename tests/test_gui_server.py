@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import http.client
 import json
+import sys
 import threading
 
 import pytest
@@ -20,7 +21,7 @@ def gui(tmp_path):
     write(
         tmp_path, "lab/newton/results.json", results("arm", engine="newton", verdicts={"LOAD": "PASS", "HOLD": "FAIL"})
     )
-    app = server.App(TOKEN)
+    app = server.App(TOKEN, settings_path=tmp_path / "settings" / "gui.json", workspace=tmp_path / "ws")
     folder_id = app.open(tmp_path / "lab")
     httpd = server.make_server(app)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -129,3 +130,40 @@ def test_answers_are_strict_json(gui, tmp_path):
 def test_the_gui_command_refuses_a_missing_folder(tmp_path, capsys):
     assert cli.main(["gui", str(tmp_path / "none"), "--no-browser"]) == cli.ERROR
     assert "no folder" in capsys.readouterr().err
+
+
+def test_settings_are_saved_in_their_file(gui, tmp_path):
+    port, _ = gui
+    found = api(port, "GET", "/api/settings")
+    assert found["pythons"] == {} and found["workspace"] == str(tmp_path / "ws") and found["workspace_for_session"]
+    assert [e["name"] for e in found["engines"]] == ["physx", "newton"]
+    saved = api(port, "POST", "/api/settings", {"pythons": {"newton": f'"{sys.executable}"'}, "workspace": "elsewhere"})
+    assert saved["pythons"] == {"newton": sys.executable}
+    on_disk = json.loads((tmp_path / "settings" / "gui.json").read_text(encoding="utf-8"))
+    assert on_disk == {"pythons": {"newton": sys.executable}, "workspace": "elsewhere"}
+    assert request(port, "POST", "/api/settings", {"pythons": {"bullet": "python"}})[0] == 400
+
+
+def test_check_the_python_of_an_engine(gui):
+    port, _ = gui
+    assert api(port, "POST", "/api/check-python", {"engine": "physx"})["text"] == "no Python set"
+    api(port, "POST", "/api/settings", {"pythons": {"physx": sys.executable}})
+    found = api(port, "POST", "/api/check-python", {"engine": "physx"})
+    assert found["ok"] and found["same_version"] and found["text"].startswith("proofmass-check ")
+
+
+def test_a_batch_that_cannot_start_says_why(gui, tmp_path):
+    port, _ = gui
+    asset = write(tmp_path, "assets/arm.usda", "#usda 1.0\n")
+    body = {"assets": [str(asset)], "engines": ["physx"]}
+    status, _, text = request(port, "POST", "/api/batch-preview", body)
+    assert status == 400 and json.loads(text)["error"] == "set the Python of physx in the settings first"
+    api(port, "POST", "/api/settings", {"pythons": {"physx": sys.executable}})
+    [preview] = api(port, "POST", "/api/batch-preview", body)
+    assert (
+        preview["run"] == "physx" and "proofmass_check run" in preview["command"] and "--events" in preview["command"]
+    )
+    found = api(port, "POST", "/api/usd-files", {"path": str(tmp_path / "assets")})
+    assert [f["name"] for f in found["files"]] == ["arm.usda"]
+    assert api(port, "GET", "/api/batches") == []
+    assert request(port, "GET", "/api/batch?id=..%2Fws")[0] == 400

@@ -20,8 +20,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from proofmass_check import __version__
-from proofmass_check.gui import report, runs
+from proofmass_check import __version__, engines
+from proofmass_check.gui import batches, report, runs
+from proofmass_check.gui import settings as gui_settings
 from proofmass_check.rules import SPEC_VERSION
 
 STATIC = Path(__file__).parent / "static"
@@ -53,13 +54,34 @@ class ApiError(Exception):
 
 
 class App:
-    """What the server keeps between requests: the token and the folders opened in this session."""
+    """What the server keeps between requests: the token, the folders opened in this session, and the batches.
 
-    def __init__(self, token: str):
+    settings_path: the file of the GUI's settings. workspace: a workspace for this session only, in
+    place of the one in the settings.
+    """
+
+    def __init__(self, token: str, settings_path: Path | None = None, workspace: Path | None = None):
         self.token = token
         self.folders: dict[str, runs.Folder] = {}
         self._lock = threading.Lock()
         self._next_id = 1
+        self.settings_path = settings_path or gui_settings.settings_file()
+        self.workspace = workspace
+        self.batches = batches.Manager(self.settings)
+
+    def settings(self) -> gui_settings.GuiSettings:
+        found = gui_settings.load(self.settings_path)
+        if self.workspace is not None:
+            found.workspace = str(self.workspace)
+        return found
+
+    def ensure_open(self, path: Path) -> str:
+        """The ID of a folder, opened when it is not open yet. Unlike open(), it does not read it again."""
+        with self._lock:
+            for folder_id, known in self.folders.items():
+                if known.path == path.resolve():
+                    return folder_id
+        return self.open(path)
 
     def open(self, path: str | Path) -> str:
         """Read a folder, and give its ID. A folder that is open already is read again."""
@@ -142,6 +164,8 @@ class Handler(BaseHTTPRequestHandler):
             status, kind, payload = self._api(method, url.path, parse_qs(url.query), body)
         except ApiError as e:
             return self._send_json(e.status, {"error": str(e)})
+        except batches.BatchError as e:
+            return self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
         except Exception:  # noqa: BLE001  the page must get an answer, whatever went wrong
             traceback.print_exc(file=sys.stderr)
             return self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "the server failed: see its terminal"})
@@ -196,6 +220,20 @@ class Handler(BaseHTTPRequestHandler):
                 self.app.folder(body.get("a")), self.app.folder(body.get("b"))
             ),
             ("POST", "/api/report"): lambda: self._report(body),
+            ("GET", "/api/settings"): lambda: self._settings(),
+            ("POST", "/api/settings"): lambda: self._save_settings(body),
+            ("POST", "/api/check-python"): lambda: self._check_python(body),
+            ("POST", "/api/usd-files"): lambda: batches.usd_files(str(body.get("path", ""))),
+            ("POST", "/api/batch-preview"): lambda: batches.preview(
+                batches.parse_request(body, self.app.settings()), self.app.settings()
+            ),
+            ("POST", "/api/batches"): lambda: self._batch(self.app.batches.create(body)),
+            ("GET", "/api/batches"): lambda: self.app.batches.batches(),
+            ("GET", "/api/batch"): lambda: self._batch(self.app.batches.folder(_one(query, "id"))),
+            ("POST", "/api/batch-cancel"): lambda: self._cancel(body),
+            ("GET", "/api/batch-log"): lambda: {
+                "text": self.app.batches.log(self.app.batches.folder(_one(query, "id")), _one(query, "run"))
+            },
         }
         if (method, path) not in routes:
             raise ApiError(HTTPStatus.NOT_FOUND, f"no API {method} {path}")
@@ -228,6 +266,51 @@ class Handler(BaseHTTPRequestHandler):
             return HTTPStatus.OK, "text/csv; charset=utf-8", report.to_csv(chosen, full_paths)
         title = str(body.get("title") or "proofmass-check results")
         return HTTPStatus.OK, "text/html; charset=utf-8", report.to_html(chosen, title, full_paths)
+
+    def _settings(self) -> dict:
+        found = self.app.settings()
+        return {
+            "pythons": found.pythons,
+            "workspace": found.workspace,
+            "workspace_for_session": self.app.workspace is not None,
+            "file": str(self.app.settings_path),
+            "version": __version__,
+            "engines": [
+                {"name": name, "needs": needs, "python": found.python(name)}
+                for name, (_, needs) in engines.ENGINES.items()
+            ],
+        }
+
+    def _save_settings(self, body: dict) -> dict:
+        found = self.app.settings()
+        pythons = body.get("pythons", {})
+        if not isinstance(pythons, dict) or not set(pythons) <= set(engines.ENGINES):
+            raise ApiError(HTTPStatus.BAD_REQUEST, f"a Python is set for one of {', '.join(engines.ENGINES)}")
+        found.pythons = {k: str(v).strip().strip('"') for k, v in pythons.items() if str(v).strip()}
+        workspace = str(body.get("workspace", found.workspace)).strip().strip('"')
+        if not workspace:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "give the workspace folder")
+        found.workspace = workspace
+        gui_settings.save(found, self.app.settings_path)
+        return self._settings()
+
+    def _check_python(self, body: dict) -> dict:
+        """Whether an engine's Python runs proofmass-check, and whether it is the GUI's version."""
+        engine = body.get("engine")
+        if engine not in engines.ENGINES:
+            raise ApiError(HTTPStatus.BAD_REQUEST, f"no engine {engine}")
+        ok, text = gui_settings.check_python(self.app.settings().python(engine))
+        same = ok and text.split()[1:2] == [__version__]  # it prints "proofmass-check 0.2.0 (spec 0.3)"
+        return {"engine": engine, "ok": ok, "text": text, "same_version": same, "version": __version__}
+
+    def _batch(self, folder: Path) -> dict:
+        """A batch's state, and the ID of its folder among the open folders, for its matrix."""
+        return self.app.batches.state(folder) | {"folder": self.app.ensure_open(folder)}
+
+    def _cancel(self, body: dict) -> dict:
+        folder = self.app.batches.folder(body.get("id"))
+        self.app.batches.cancel(folder, body.get("run") or None)
+        return self._batch(folder)
 
     # --- answers
 
@@ -266,14 +349,17 @@ def make_server(app: App, port: int = 0) -> ThreadingHTTPServer:
     return server
 
 
-def serve(folders: list[Path], port: int = 0, open_browser: bool = True) -> int:
-    """Open the folders, serve the page until Ctrl+C, and give the exit status."""
-    app = App(secrets.token_urlsafe(24))
+def serve(folders: list[Path], port: int = 0, open_browser: bool = True, workspace: Path | None = None) -> int:
+    """Open the folders, serve the page until Ctrl+C, and give the exit status.
+
+    When the server stops, it stops the worker that runs, so no engine runs on without the GUI.
+    """
+    app = App(secrets.token_urlsafe(24), workspace=workspace.resolve() if workspace else None)
     for folder in folders:
         app.open(folder)
     server = make_server(app, port)
     url = f"http://127.0.0.1:{server.server_address[1]}/?token={app.token}"
-    print(f"proofmass-check GUI: {url}\nPress Ctrl+C to stop.", flush=True)
+    print(f"proofmass-check GUI: {url}\nWorkspace: {app.settings().workspace}\nPress Ctrl+C to stop.", flush=True)
     if open_browser:
         webbrowser.open(url)
     try:
@@ -281,5 +367,6 @@ def serve(folders: list[Path], port: int = 0, open_browser: bool = True) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        app.batches.stop()
         server.server_close()
     return 0

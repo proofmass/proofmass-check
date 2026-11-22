@@ -70,6 +70,7 @@ pip install "proofmass-check @ git+https://github.com/proofmass/proofmass-check"
 
 ```bash
 proofmass-check run path/to/asset.usd --engine physx
+proofmass-check run a.usd b.usd c.usd --engine physx --out results
 proofmass-check list-checks
 ```
 
@@ -79,10 +80,12 @@ proofmass-check list-checks
 | `--variant SET=VALUE` | select a variant; repeat for more than one. The engine's own variant set (`PhysX`, `Newton`) is selected when the asset has it |
 | `--no-floor` | no floor, for a pinned arm whose links reach below its base |
 | `--settle S` | seconds a drive gets for a move (spec: 1.5). A run with another value says so in its results |
-| `--out DIR` | where to write `results.json` (default `./proofmass-check-<asset name>`) |
+| `--out DIR` | where to write `results.json` (default `./proofmass-check-<asset name>`). With several assets, a folder per asset in it |
+| `--events FILE` | write the progress to FILE as JSON Lines, for a program that follows the run |
 
-The exit status is 0 when no check failed, 1 when a check failed, and 2 when the run could not
-finish. `results.json` holds every verdict and number, the versions of the tool, the spec and the
+Several assets run in one start of the engine, which saves the start of Isaac Sim for each. The
+exit status is 0 when no check failed, 1 when a check failed, and 2 when the run could not
+finish. With several assets, it is the highest of theirs. `results.json` holds every verdict and number, the versions of the tool, the spec and the
 engine, and the SHA-256 of the asset file.
 [src/proofmass_check/results.schema.json](src/proofmass_check/results.schema.json) describes it.
 
@@ -94,8 +97,11 @@ proofmass-check gui path/to/folder-with-results
 
 This opens a page in the browser. It finds every results file below the folder, whatever its name,
 and shows a matrix of runs and checks, the page of each run, and comparisons: PhysX with Newton,
-one version with another, or two folders. It saves a report as one HTML file or as CSV. The page
-only reads results, and it runs in any Python that has proofmass-check, without an engine.
+one version with another, or two folders. It saves a report as one HTML file or as CSV.
+
+The page also runs checks. In its settings, give the Python of each engine once. A new batch then
+runs the assets you tick in the engines you choose, one run at a time, and shows each check as it
+runs. The page itself runs in any Python that has proofmass-check, without an engine.
 [docs/gui.md](docs/gui.md) describes it.
 
 ## How a run works

@@ -43,7 +43,7 @@ label{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .crumbs{display:flex;gap:8px;min-width:0;overflow:hidden;white-space:nowrap;color:var(--on-bar);font-size:14px}
 .crumbs a{color:var(--on-bar)}
 .crumbs span.sep{opacity:.5}
-.tag{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--fill);border:1px solid var(--fill);padding:2px 7px;white-space:nowrap}
+.tag{font-family:var(--mono);font-size:12px;color:var(--fill);border:1px solid var(--fill);padding:2px 7px;white-space:nowrap}
 
 main{max-width:1400px;margin:0 auto;padding:28px 24px 80px;display:flex;flex-direction:column;gap:22px}
 h1{font-size:30px;line-height:1.1;font-weight:800;font-stretch:75%;display:flex;flex-wrap:wrap;align-items:baseline;gap:12px}
@@ -115,3 +115,30 @@ tr.differs td:first-child{box-shadow:inset 3px 0 var(--warn)}
 .folder .actions{grid-row:1/span 3;grid-column:2;display:flex;gap:6px;align-items:start}
 .pass-text{color:var(--ok)}.fail-text{color:var(--bad)}
 .empty{padding:28px;border:1px dashed var(--line);color:var(--muted);text-align:center}
+
+/* Pages in the bar */
+.links{display:flex;gap:18px;margin-left:auto;font-size:14px}
+.links a{color:var(--on-bar);text-decoration:none}
+.links a:hover{text-decoration:underline;text-decoration-color:var(--fill)}
+
+/* A link that looks like a button */
+a.button{display:inline-block;font:400 14px/1.5 var(--sans);padding:5px 12px;border:1px solid var(--line);background:var(--raised);color:var(--fg);text-decoration:none;white-space:nowrap}
+a.button.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+h1 a.button{margin-left:auto}
+input[type=number]{background:var(--raised);border:1px solid var(--line);padding:5px 8px;width:90px}
+details>summary{cursor:pointer;color:var(--muted);font-size:14px}
+
+/* Settings */
+.field{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-bottom:1px solid var(--grid)}
+.field .name{font:600 14px var(--mono)}
+
+/* A batch: its runs, live */
+.batch-panel{display:flex;flex-direction:column;gap:12px}
+table.batch th{white-space:normal;vertical-align:bottom;font-size:13px;color:var(--fg)}
+table.batch th .toolbar{gap:4px;margin-top:4px}
+table.batch th button{padding:1px 8px;font-size:12px}
+.running{display:inline-flex;align-items:center;gap:8px;font:12px var(--mono)}
+.spinner{width:10px;height:10px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation:none}}
+pre.log{border-color:var(--line);max-height:320px}

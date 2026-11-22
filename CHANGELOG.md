@@ -14,9 +14,23 @@ and the spec version.
   [docs/gui.md](docs/gui.md). It opens folders and finds every results file below them, whatever
   its name. It shows a matrix of runs and checks, the page of one run, a comparison of runs (PhysX
   and Newton, two versions, repeats), and a comparison of two folders paired by the asset's SHA-256.
-  It saves a report as one HTML file or as CSV. It only reads results: it never runs a check and
-  never changes a file. The server listens on 127.0.0.1 only and needs the token from the address
-  it prints. It needs nothing beyond the standard library.
+  It saves a report as one HTML file or as CSV. It never changes an asset or a results file. The
+  server listens on 127.0.0.1 only and needs the token from the address it prints. It needs
+  nothing beyond the standard library.
+- The GUI runs checks too, phase 2 of docs/gui.md. Settings keep the Python of each engine and a
+  workspace. A new batch lists the USD files of a folder, takes the engines, the Newton repeats and
+  the settings, and shows the command of each run before it starts. The batch's page shows each
+  asset of each run live: the check, its step and the time so far. Runs go one at a time, and a run
+  can be cancelled. When a worker crashes in the middle of an asset, that asset is marked as
+  stopped and a new worker runs the rest. The GUI reads the state of a batch from its files, so it
+  can read it again after a restart. It never accepts the NVIDIA licence for the user.
+- `proofmass-check run` takes several assets, and runs them in one start of the engine. Isaac Sim
+  can take a minute to start, and it started once per asset before. With several assets, `--out`
+  is a folder with a folder per asset. An asset that stops with an error does not stop the others.
+  The exit status is the highest of the assets'. Two assets of one file name are refused.
+- `proofmass-check run --events FILE`: the progress as JSON Lines, for a program that follows a
+  run: the engine's start, each asset, each check with its engine operations, each verdict, the
+  end (docs/gui.md, section 5.2). `runner.run_checks()` takes the callback that writes them.
 - `measurements` in `results.json`: each check that ran lists the numbers it compared with its
   rule, each with its limit, bound, unit and `ok` (docs/spec.md, section 6). A program can now read
   them without the detail text, whose wording can change. The GUI uses them for the margin of each

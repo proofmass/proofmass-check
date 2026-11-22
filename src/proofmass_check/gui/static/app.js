@@ -20,6 +20,7 @@ const main = document.getElementById('main');
 const selected = new Set(JSON.parse(sessionStorage.getItem('selected') || '[]'));
 const view = {onlyFailed: false, text: '', wheeledOpen: false, onlyDiffers: false, fullPaths: false};
 let state = null;
+let poller = null;  // the timer that follows a running batch
 
 // --- elements
 
@@ -177,15 +178,19 @@ async function route() {
       h('code', {}, 'proofmass-check gui'), ' printed in its terminal. It holds the token this page needs.'));
     return;
   }
+  if (poller) { clearInterval(poller); poller = null; }
   const parts = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   try {
     state = await apiJson('/api/state');
     document.getElementById('version').textContent = `${state.version} · spec ${state.spec_version}`;
     if (parts[0] === 'f' && parts[2] === 'r') await runView(parts[1], parts[3]);
     else if (parts[0] === 'f') folderView(parts[1]);
+    else if (parts[0] === 'b') await batchView(parts[1]);
+    else if (parts[0] === 'settings') await settingsView();
+    else if (parts[0] === 'new') await newBatchView();
     else if (parts[0] === 'compare') await compareView(JSON.parse(parts[1]));
     else if (parts[0] === 'pair') await pairView(parts[1], parts[2]);
-    else homeView();
+    else await homeView();
   } catch (e) {
     crumbs();
     fill(main, h('h1', {}, 'Something went wrong'), h('p', {class: 'status err'}, e.message),
@@ -193,8 +198,9 @@ async function route() {
   }
 }
 
-function homeView() {
+async function homeView() {
   crumbs();
+  const batches = await apiJson('/api/batches');
   const say = status();
   const input = h('input', {type: 'text', size: 70, placeholder: 'C:\\results\\lightwheel',
     'aria-label': 'The folder to open'});
@@ -212,9 +218,13 @@ function homeView() {
     ? h('div', {class: 'folders'}, state.folders.map(folderRow))
     : h('p', {class: 'empty'}, 'Open a folder that holds results files. The page reads every results file ',
       'of proofmass-check below it, whatever the file is called.');
-  fill(main, h('h1', {}, 'Results'),
-    h('p', {class: 'sub'}, 'Folders with results files of proofmass-check. The page only shows them: ',
-      'it never changes a file and never runs a check.'),
+  fill(main,
+    h('h1', {}, 'Batches', h('a', {class: 'button primary', href: '#/new'}, 'New batch')),
+    h('p', {class: 'sub'}, 'Runs of proofmass-check that this page started, in the workspace. ',
+      h('a', {href: '#/settings'}, 'Settings'), ' give the Python of each engine and the workspace.'),
+    batches.length ? h('div', {class: 'folders'}, batches.slice(0, 30).map(batchRow))
+      : h('p', {class: 'empty'}, 'No batch yet. Start one with New batch.'),
+    h('h2', {}, 'Folders', h('span', {class: 'muted'}, 'results files from anywhere, read only')),
     form, say, list);
   input.focus();
 }
@@ -239,10 +249,11 @@ function folderRow(folder) {
       h('button', {onclick: async () => { await apiJson('/api/close', {folder: folder.id}); route(); }}, 'Close')));
 }
 
-function folderView(folderId) {
+function folderView(folderId, batch) {
+  // batch, for the folder of a batch: {name, panel}. The panel shows the batch's runs above the matrix.
   const folder = state.folders.find(f => f.id === folderId);
   if (!folder) throw new Error(`No open folder ${folderId}. Open it again from the list of folders.`);
-  crumbs([folder.name, null]);
+  crumbs(batch ? [batch.name, null] : [folder.name, null]);
   const runs = [...folder.runs].sort((a, b) =>
     a.asset.localeCompare(b.asset) || a.engine.localeCompare(b.engine) || a.id.localeCompare(b.id));
   const ids = order(runs.flatMap(r => Object.keys(r.verdicts)));
@@ -322,8 +333,10 @@ function folderView(folderId) {
   updateSelection();
   const versions = [...new Set(runs.map(r => `${r.tool_version} (spec ${r.spec_version})`))].join(', ');
   fill(main,
-    h('h1', {}, folder.name),
+    h('h1', {}, batch ? batch.name : folder.name),
     h('p', {class: 'sub'}, h('span', {class: 'mono'}, folder.path), versions ? ` · proofmass-check ${versions}` : ''),
+    batch ? batch.panel : null,
+    batch ? h('h2', {}, 'Results', h('span', {class: 'muted'}, 'the runs that have ended')) : null,
     h('p', {class: 'toolbar'},
       h('span', {}, `${c.total} runs`), h('span', {class: 'pass-text'}, `${c.passed} passed`),
       h('span', {class: 'fail-text'}, `${c.failed} failed`),
@@ -503,5 +516,267 @@ async function pairView(a, b) {
     alone(folderA, p.only_a), alone(folderB, p.only_b));
 }
 
-window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
+// --- batches: runs that the page starts (docs/gui.md, sections 6.2, 6.3 and 6.9)
+
+const RUN_STATES = {running: 'running', queued: 'waiting to start', done: 'done', stopped: 'stopped',
+  cancelled: 'cancelled', error: 'the engine did not start', 'not started': 'not started'};
+const LICENCE_NOTE = 'Isaac Sim asks you to accept the NVIDIA Omniverse License Agreement the first time it '
+  + 'starts. This page never accepts it for you: start Isaac Sim once in a terminal and accept it there, '
+  + 'before the first PhysX batch.';
+let viewNumber = 0;  // a view that loads in the background draws only while it is still the current view
+
+function batchCounts(b) {
+  const all = b.runs.flatMap(r => r.assets);
+  const n = (...names) => all.filter(a => names.includes(a.state)).length;
+  return {passed: n('passed'), failed: n('failed'), errors: n('error', 'stopped'), open: n('running', 'waiting')};
+}
+
+function batchRow(b) {
+  const c = batchCounts(b);
+  return h('div', {class: 'folder'},
+    h('a', {class: 'name', href: `#/b/${encodeURIComponent(b.id)}`}, b.name),
+    h('div', {class: 'path'}, `${b.created} · ${b.engines.join(', ')} · ${b.assets.length} assets · ${b.path}`),
+    h('div', {class: 'counts'},
+      h('span', {class: b.state === 'running' ? 'badge' : 'muted'}, b.state),
+      h('span', {class: 'pass-text'}, `${c.passed} passed`),
+      h('span', {class: 'fail-text'}, `${c.failed} failed`),
+      c.errors ? h('span', {class: 'fail-text'}, `${c.errors} stopped with an error`) : null,
+      c.open ? h('span', {class: 'muted'}, `${c.open} to run`) : null));
+}
+
+function assetCell(b, run, a) {
+  const link = child => h('a', {href: runHref(b.folder, `${run.id}/${a.name}/results.json`)}, child);
+  if (a.state === 'passed') return link(h('span', {class: 'v pass'}, '✓ PASSED'));
+  if (a.state === 'failed') return link(h('span', {class: 'v fail'}, '✕ FAILED'));
+  if (a.state === 'error') return link(h('span', {class: 'v err', title: a.error || ''}, 'ERROR'));
+  if (a.state === 'stopped') return h('span', {class: 'v err', title: a.error || ''}, 'STOPPED');
+  if (a.state === 'running') {
+    const parts = [a.check || 'reading the asset', a.total ? `${a.done} of ${a.total}` : a.done ? `${a.done}` : null,
+      typeof a.elapsed === 'number' ? seconds(a.elapsed) : null];
+    return h('span', {class: 'running'}, h('span', {class: 'spinner', 'aria-hidden': 'true'}),
+      parts.filter(Boolean).join(' · '));
+  }
+  return h('span', {class: 'muted'}, a.state);
+}
+
+async function cancelRun(b, runId, refresh) {
+  const what = runId ? `the run ${runId}` : 'every run of this batch';
+  if (!window.confirm(`Stop ${what}? The asset a worker is on gets no results.`)) return;
+  await apiJson('/api/batch-cancel', {id: b.id, run: runId});
+  await refresh();
+}
+
+async function drawLog(panel, b) {
+  if (!panel.log) return fill(panel.logBox);
+  const found = await apiJson(`/api/batch-log?id=${encodeURIComponent(b.id)}&run=${encodeURIComponent(panel.log)}`);
+  fill(panel.logBox,
+    h('div', {class: 'toolbar'}, h('b', {}, `Log of ${panel.log}`), h('span', {class: 'muted'}, 'the last 200 lines'),
+      h('span', {class: 'grow'}), h('button', {onclick: () => { panel.log = null; fill(panel.logBox); }}, 'Hide')),
+    h('pre', {class: 'error log'}, found.text || 'Nothing yet.'));
+}
+
+function drawPanel(panel, b, refresh) {
+  const busy = b.state === 'running';
+  const head = h('tr', {}, h('th', {}, 'Asset'), b.runs.map(r => h('th', {},
+    h('div', {}, h('span', {class: 'mono'}, r.id), ' · ', RUN_STATES[r.state] || r.state),
+    r.phase ? h('div', {class: 'muted'}, `${r.phase}…`) : null,
+    h('div', {class: 'toolbar'},
+      ['running', 'queued'].includes(r.state) ? h('button', {onclick: () => cancelRun(b, r.id, refresh)}, 'Cancel') : null,
+      r.workers ? h('button', {onclick: () => { panel.log = r.id; drawLog(panel, b); }}, 'Log') : null))));
+  const rows = b.assets.map((asset, i) => h('tr', {}, h('td', {class: 'mono'}, asset.name),
+    b.runs.map(r => h('td', {}, assetCell(b, r, r.assets[i])))));
+  const other = b.runs.filter(r => r.version && r.version.split(' ')[1] !== state.version);
+  fill(panel,
+    h('h2', {}, 'Runs', h('span', {class: 'muted'}, `${b.created} · settle ${b.settle_s} s · `
+      + `${b.floor ? 'floor' : 'no floor'}${b.variants.length ? ` · ${b.variants.join(' ')}` : ''}`),
+      busy ? h('button', {onclick: () => cancelRun(b, null, refresh)}, 'Cancel the batch') : null),
+    b.runs.filter(r => r.error).map(r => banner(`${r.id}: the engine did not start: ${r.error}. Its log says more.`)),
+    other.map(r => banner(`${r.id} ran ${r.version}, and this page is ${state.version}.`)),
+    b.runs.some(r => r.engine === 'physx' && r.state === 'error') ? banner(LICENCE_NOTE, true) : null,
+    h('div', {class: 'scroll'}, h('table', {class: 'batch'}, h('thead', {}, head), h('tbody', {}, rows))),
+    panel.logBox,
+    h('details', {}, h('summary', {}, 'The command of each run'),
+      b.runs.map(r => [h('p', {class: 'sub'}, r.id), h('pre', {class: 'error log'}, r.command)])));
+}
+
+async function batchView(batchId) {
+  const mine = viewNumber;
+  let b = await apiJson(`/api/batch?id=${encodeURIComponent(batchId)}`);
+  state = await apiJson('/api/state');  // the batch's folder may have been opened just now
+  const panel = h('section', {class: 'batch-panel'});
+  panel.logBox = h('div');
+  const ended = x => x.runs.reduce((n, r) => n + r.assets.filter(a => !['waiting', 'running'].includes(a.state)).length, 0);
+  let seen = ended(b);
+  const refresh = async () => {
+    b = await apiJson(`/api/batch?id=${encodeURIComponent(batchId)}`);
+    if (mine !== viewNumber) return;
+    if (ended(b) !== seen) {  // an asset ended: its results.json is new, so the matrix is read again
+      seen = ended(b);
+      await apiJson('/api/reload', {folder: b.folder});
+      state = await apiJson('/api/state');
+      if (mine !== viewNumber) return;
+      folderView(b.folder, {name: b.name, panel});
+    }
+    drawPanel(panel, b, refresh);
+    if (panel.log) await drawLog(panel, b);
+    if (b.state !== 'running' && poller) { clearInterval(poller); poller = null; }
+  };
+  drawPanel(panel, b, refresh);
+  folderView(b.folder, {name: b.name, panel});
+  if (b.state === 'running') poller = setInterval(() => refresh().catch(() => {}), 1500);
+}
+
+async function settingsView() {
+  crumbs(['Settings', null]);
+  const s = await apiJson('/api/settings');
+  const say = status();
+  const workspace = h('input', {type: 'text', size: 70, value: s.workspace, 'aria-label': 'The workspace folder',
+    disabled: s.workspace_for_session});
+  const fields = s.engines.map(engine => {
+    const input = h('input', {type: 'text', size: 70, value: engine.python, 'aria-label': `The Python of ${engine.name}`,
+      placeholder: engine.name === 'physx' ? 'C:\\isaacsim\\.venv\\Scripts\\python.exe' : 'C:\\newton\\.venv\\Scripts\\python.exe'});
+    const answer = h('p', {class: 'status'});
+    const test = async () => {
+      await save();
+      answer.textContent = 'Starting it…';
+      answer.className = 'status';
+      const found = await apiJson('/api/check-python', {engine: engine.name});
+      answer.textContent = found.ok
+        ? `✓ ${found.text}${found.same_version ? '' : `. This page is ${found.version}: results follow the spec of the version that ran them.`}`
+        : `✕ ${found.text}`;
+      answer.className = `status${found.ok ? '' : ' err'}`;
+    };
+    return {name: engine.name, input, element: h('div', {class: 'field'},
+      h('label', {class: 'name'}, engine.name),
+      h('p', {class: 'sub'}, `Its Python needs ${engine.needs}. The page runs `, h('code', {}, 'python -m proofmass_check'), ' in it.'),
+      h('div', {class: 'toolbar'}, input, h('button', {onclick: () => test().catch(e => say.say(e.message, true))}, 'Save and test')),
+      answer)};
+  });
+  async function save() {
+    const pythons = Object.fromEntries(fields.map(f => [f.name, f.input.value]));
+    await apiJson('/api/settings', {pythons, workspace: workspace.value});
+    say.say(`Saved in ${s.file}.`);
+  }
+  fill(main, h('h1', {}, 'Settings'),
+    h('p', {class: 'sub'}, `They are kept in ${s.file}, not in the repository or the workspace.`),
+    h('h2', {}, 'Engines', h('span', {class: 'muted'}, 'each runs in its own Python')),
+    fields.map(f => f.element),
+    banner(LICENCE_NOTE, true),
+    h('h2', {}, 'Workspace', h('span', {class: 'muted'}, 'the folder where new batches go')),
+    h('div', {class: 'toolbar'}, workspace),
+    s.workspace_for_session ? h('p', {class: 'sub'}, 'This session uses the workspace given with --workspace.') : null,
+    h('div', {class: 'toolbar'}, h('button', {class: 'primary', onclick: () => save().catch(e => say.say(e.message, true))}, 'Save')),
+    say);
+}
+
+async function newBatchView() {
+  crumbs(['New batch', null]);
+  const s = await apiJson('/api/settings');
+  const say = status();
+  let files = [];
+  const name = h('input', {type: 'text', size: 40, value: 'batch', 'aria-label': 'The name of the batch'});
+  const where = h('input', {type: 'text', size: 70, placeholder: 'C:\\assets\\lightwheel', 'aria-label': 'A USD file or a folder'});
+  const filter = h('input', {type: 'text', placeholder: 'Filter the files', 'aria-label': 'Filter the files',
+    oninput: () => drawFiles()});
+  const filesBox = h('div');
+  const engineBoxes = s.engines.map(e => ({name: e.name, box: h('input', {type: 'checkbox', checked: Boolean(e.python) && e.name === 'physx'})}));
+  const repeats = h('input', {type: 'number', min: 1, max: 20, step: 1, value: 1, 'aria-label': 'Runs of each asset in Newton'});
+  const settle = h('input', {type: 'number', min: 0.1, max: 60, step: 0.1, value: 1.5, 'aria-label': 'Settle time in s'});
+  const floor = h('input', {type: 'checkbox', checked: true});
+  const variants = h('input', {type: 'text', size: 40, placeholder: 'Physics=PhysX', 'aria-label': 'Variants, SET=VALUE'});
+  const preview = h('div');
+  const visible = () => files.filter(f => !filter.value || f.name.toLowerCase().includes(filter.value.toLowerCase()));
+
+  function body() {
+    return {
+      name: name.value, assets: files.filter(f => f.ticked).map(f => f.path),
+      engines: engineBoxes.filter(e => e.box.checked).map(e => e.name),
+      repeats: Number(repeats.value), settle_s: Number(settle.value), floor: floor.checked,
+      variants: variants.value.split(/[\s,]+/).filter(Boolean),
+    };
+  }
+
+  let timer = null;
+  function update() {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        const runs = await apiJson('/api/batch-preview', body());
+        fill(preview, runs.map(r => [h('p', {class: 'sub'}, r.run), h('pre', {class: 'error log'}, r.command)]));
+      } catch (e) {
+        fill(preview, h('p', {class: 'status'}, e.message));
+      }
+    }, 300);
+  }
+
+  function drawFiles() {
+    const shown = visible();
+    const ticked = files.filter(f => f.ticked).length;
+    const names = files.filter(f => f.ticked).map(f => f.name.split('/').pop().replace(/\.[^.]+$/, ''));
+    const twice = [...new Set(names.filter((n, i) => names.indexOf(n) !== i))];
+    fill(filesBox,
+      files.length ? h('div', {class: 'toolbar'}, filter,
+        h('button', {onclick: () => { shown.forEach(f => { f.ticked = true; }); drawFiles(); update(); }}, 'Tick the files shown'),
+        h('button', {onclick: () => { files.forEach(f => { f.ticked = false; }); drawFiles(); update(); }}, 'Untick all'),
+        h('span', {class: 'muted'}, `${ticked} of ${files.length} ticked`)) : null,
+      twice.length ? banner(`Ticked files with the same name: ${twice.join(', ')}. Each batch needs different names.`) : null,
+      files.length ? h('div', {class: 'scroll'}, h('table', {}, h('tbody', {}, shown.slice(0, 500).map(f => h('tr', {},
+        h('td', {class: 'c'}, h('input', {type: 'checkbox', checked: f.ticked, 'aria-label': `Tick ${f.name}`,
+          onchange: e => { f.ticked = e.target.checked; drawFiles(); update(); }})),
+        h('td', {class: 'mono'}, f.name),
+        h('td', {class: 'num'}, `${(f.size / 1024).toFixed(0)} kB`)))))) : null,
+      shown.length > 500 ? h('p', {class: 'sub'}, `${shown.length - 500} more: filter to see them.`) : null);
+  }
+
+  const find = async () => {
+    say.say('Looking for USD files…');
+    try {
+      const found = await apiJson('/api/usd-files', {path: where.value});
+      files = found.files.map(f => ({...f, ticked: found.files.length === 1}));
+      say.say(`${files.length} USD files in ${found.root}${found.truncated ? ', and more not listed' : ''}. Tick the root file of each asset.`);
+      drawFiles();
+      update();
+    } catch (e) {
+      say.say(e.message, true);
+    }
+  };
+  const start = async () => {
+    say.say('Testing the engines\' Pythons and starting the batch…');
+    try {
+      const made = await apiJson('/api/batches', body());
+      location.hash = `#/b/${encodeURIComponent(made.id)}`;
+    } catch (e) {
+      say.say(e.message, true);
+    }
+  };
+  for (const input of [name, repeats, settle, floor, variants, ...engineBoxes.map(e => e.box)]) input.addEventListener('input', update);
+  fill(main, h('h1', {}, 'New batch'),
+    h('p', {class: 'sub'}, 'Every asset runs in each engine you choose. The engine starts once for all the assets of a run, ',
+      'and one run goes at a time. The results go to the workspace: ', h('span', {class: 'mono'}, s.workspace), '.'),
+    h('h2', {}, 'Assets'),
+    h('form', {class: 'toolbar', onsubmit: e => { e.preventDefault(); find(); }}, where,
+      h('button', {type: 'submit'}, 'Find USD files')),
+    filesBox,
+    h('h2', {}, 'Engines'),
+    engineBoxes.map(e => {
+      const python = s.engines.find(x => x.name === e.name).python;
+      return h('div', {class: 'toolbar'}, h('label', {}, e.box, e.name),
+        python ? h('span', {class: 'mono muted'}, python) : h('span', {class: 'fail-text'}, 'no Python set: ', h('a', {href: '#/settings'}, 'Settings')));
+    }),
+    h('div', {class: 'toolbar'}, h('label', {}, 'Runs of each asset in Newton', repeats),
+      h('span', {class: 'muted'}, 'Newton\'s results can differ from run to run, so several runs show how much.')),
+    h('h2', {}, 'Settings', h('span', {class: 'muted'}, 'a value that is not the spec\'s is marked in the results')),
+    h('div', {class: 'toolbar'}, h('label', {}, 'Name', name)),
+    h('div', {class: 'toolbar'}, h('label', {}, 'Settle time, s', settle), h('span', {class: 'muted'}, 'spec: 1.5')),
+    h('div', {class: 'toolbar'}, h('label', {}, floor, 'Floor'), h('span', {class: 'muted'}, 'off for a pinned arm whose links reach below its base')),
+    h('div', {class: 'toolbar'}, h('label', {}, 'Variants', variants), h('span', {class: 'muted'}, 'SET=VALUE, more than one with spaces')),
+    h('h2', {}, 'Commands', h('span', {class: 'muted'}, 'what each run will start')),
+    preview,
+    h('div', {class: 'toolbar'}, h('button', {class: 'primary', onclick: start}, 'Start the batch')),
+    say);
+  where.focus();
+  update();
+}
+
+window.addEventListener('hashchange', () => { viewNumber += 1; route(); window.scrollTo(0, 0); });
 route();
