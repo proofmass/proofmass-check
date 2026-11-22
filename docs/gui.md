@@ -327,7 +327,9 @@ A switch shows the plan for PhysX or for Newton.
 
 - **Joints:** name, type, bodies, limits (deg or mm), rest position, drive (stiffness, damping, max
   force) and where it comes from (PhysicsDriveAPI or MjcActuator), speed limit, mimic leader and
-  ratio, the D6 joint it came from. Not built yet: filters (driven, passive, no limits, mimic).
+  ratio, the D6 joint it came from. Filters show the joints the drive checks move, the ones PASSIVE
+  pushes, the ones with no limits, the ones that follow another joint, and the ones a run marked.
+  inspect gives each joint's role from the same sets as the plan (`driven`, `pushed`, `limited`).
 - **Load on a joint:** the mass it carries (the bodies `Asset.carried` gives) and the distance of
   that mass's centre from the joint axis, and the largest gravity load, next to the drive's max
   force. The gravity load is the term PASSIVE starts its push from. With these, a user can see a
@@ -341,11 +343,13 @@ A switch shows the plan for PhysX or for Newton.
 
 - **Colliders** from `inspect --geometry`: hulls and cylinders in the file pose. No render meshes:
   the view shows what the engine collides, which is what the checks test.
-- **Joints:** pivot and axis. Not built yet: the limits as an arc (revolute) or a segment
-  (prismatic).
-- **Gripper site:** the closing axis through the grasp centre. Not built yet: the GRIP box.
-- **Scene:** the floor as a grid at the run's floor height, and the world axes in a corner. Not
-  built yet: an arrow along +X for a wheeled robot.
+- **Joints:** pivot and axis. The selected joint shows its range where the body it moves goes:
+  an arc about its axis through the centre of what it carries (revolute), or a segment along its
+  axis (prismatic), with both limits written and a tick at the file pose.
+- **Gripper site:** the closing axis through the grasp centre, and the box GRIP closes on, dashed.
+  inspect gives the box from `grip_box()` in checks/grip.py, so it is the check's own box.
+- **Scene:** the floor as a grid at the run's floor height, and the world axes in a corner. A
+  wheeled robot gets an arrow along +X from its driven axle: the front the wheeled checks expect.
 - **Colours:** opened from a run, a joint with a failed measurement in red, a close one in amber,
   and the body it moves tinted the same. A click on a joint selects its row in the joints table,
   and a click on a row selects the joint.

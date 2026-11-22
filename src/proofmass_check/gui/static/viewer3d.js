@@ -23,6 +23,9 @@ function makeViewer(canvas, data, marks, onPick) {
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const unit = a => { const l = Math.hypot(...a) || 1; return scale(a, 1 / l); };
   const apply = (m, p) => [0, 1, 2].map(i => m[i][0] * p[0] + m[i][1] * p[1] + m[i][2] * p[2] + m[i][3]);
+  // v turned by angle (rad) about the unit axis k, by the right-hand rule, as a joint turns (Rodrigues).
+  const turn = (v, k, angle) => add(add(scale(v, Math.cos(angle)), scale(cross(k, v), Math.sin(angle))),
+    scale(k, dot(k, v) * (1 - Math.cos(angle))));
 
   // The triangles of every collider, in the world, with the body they belong to. Each collider is
   // convex, so each triangle's normal is turned to point away from the collider's centre. A face
@@ -108,18 +111,25 @@ function makeViewer(canvas, data, marks, onPick) {
     const near = size * 0.01;
     const toView = p => { const d = sub(p, b.eye); return [dot(d, b.right), dot(d, b.up), dot(d, b.forward)]; };
     const toScreen = v => [width / 2 + (v[0] * focal) / v[2], height / 2 - (v[1] * focal) / v[2]];
-    const line = (from, to, rgb, widthPx) => {
-      const a = toView(from);
-      const c = toView(to);
-      if (a[2] < near || c[2] < near) return;
-      const [x1, y1] = toScreen(a);
-      const [x2, y2] = toScreen(c);
+    const polyline = (points, rgb, widthPx, dash = []) => {
+      const v = points.map(toView);
+      if (v.some(p => p[2] < near)) return;
       ctx.strokeStyle = css(rgb);
       ctx.lineWidth = widthPx;
+      ctx.setLineDash(dash);
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      v.map(toScreen).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
       ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    const line = (from, to, rgb, widthPx, dash = []) => polyline([from, to], rgb, widthPx, dash);
+    const text = (at, words, rgb) => {
+      const v = toView(at);
+      if (v[2] < near) return;
+      const [x, y] = toScreen(v);
+      ctx.fillStyle = css(rgb);
+      ctx.font = '12px "IBM Plex Mono", ui-monospace, Consolas, monospace';
+      ctx.fillText(words, x + 6, y - 6);
     };
 
     // The floor, as a grid at the run's floor height.
@@ -187,6 +197,67 @@ function makeViewer(canvas, data, marks, onPick) {
     }
     for (const s of data.sites || []) {
       line(sub(s.centre, scale(s.closing, s.opening / 2)), add(s.centre, scale(s.closing, s.opening / 2)), colours.accent, 2);
+      if (s.grip_box) gripBox(s.grip_box, colours.accent);
+    }
+    if (chosen && chosen.pivot && chosen.direction && chosen.kind !== 'fixed') range(chosen, colours);
+    if (data.wheeled) front(colours.fg);
+
+    // The range of the chosen joint, where the body it moves goes: an arc for a revolute joint,
+    // around its axis through the centre of what it carries; a segment for a prismatic one. A
+    // tick marks the file pose, where the joint is at its rest position.
+    function range(j, c) {
+      if (j.lower === null || j.upper === null) {
+        text(j.pivot, 'no limits', c.warn);
+        return;
+      }
+      const rest = j.rest || 0;
+      if (j.kind === 'prismatic') {
+        const from = add(j.pivot, scale(j.direction, j.lower - rest));
+        const to = add(j.pivot, scale(j.direction, j.upper - rest));
+        line(from, to, c.accent, 3);
+        text(from, `lower ${(j.lower * 1000).toFixed(1)} mm`, c.accent);
+        text(to, `upper ${(j.upper * 1000).toFixed(1)} mm`, c.accent);
+        return;
+      }
+      let arm = j.carried_centre ? sub(j.carried_centre, j.pivot) : [0, 0, 0];
+      arm = sub(arm, scale(j.direction, dot(arm, j.direction)));
+      if (Math.hypot(...arm) < size * 0.02) {
+        arm = cross(j.direction, Math.abs(j.direction[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0]);
+      }
+      arm = scale(unit(arm), Math.min(Math.max(Math.hypot(...arm), size * 0.06), size * 0.3));
+      const at = angle => add(j.pivot, turn(arm, j.direction, angle - rest));
+      const steps = Math.max(8, Math.ceil(Math.abs(j.upper - j.lower) / 0.1));
+      const arc = Array.from({length: steps + 1}, (_, i) => at(j.lower + ((j.upper - j.lower) * i) / steps));
+      polyline(arc, c.accent, 3);
+      line(j.pivot, arc[0], c.accent, 1, [4, 3]);
+      line(j.pivot, arc[arc.length - 1], c.accent, 1, [4, 3]);
+      line(j.pivot, at(rest), c.fg, 2);
+      const deg = a => `${((a * 180) / Math.PI).toFixed(1)} deg`;
+      text(arc[0], `lower ${deg(j.lower)}`, c.accent);
+      text(arc[arc.length - 1], `upper ${deg(j.upper)}`, c.accent);
+    }
+
+    // The box GRIP closes the fingers on, as dashed edges.
+    function gripBox(box, rgb) {
+      const axes = [0, 1, 2].map(i => box.rotation.map(row => row[i] * box.size[i] / 2));
+      const corner = n => [0, 1, 2].reduce((p, i) => add(p, scale(axes[i], n & (1 << i) ? 1 : -1)), box.centre);
+      for (let n = 0; n < 8; n++) {
+        for (let i = 0; i < 3; i++) {
+          if (!(n & (1 << i))) line(corner(n), corner(n | (1 << i)), rgb, 1.5, [3, 3]);
+        }
+      }
+    }
+
+    // A wheeled robot's front: an arrow along +X from its driven axle, on the floor (docs/wheeled-robots.md).
+    function front(rgb) {
+      const z = typeof data.floor === 'number' ? data.floor : centre[2];
+      const start = [data.wheeled.axle_centre[0], data.wheeled.axle_centre[1], z];
+      const reach = Math.max(data.wheeled.track || 0, size * 0.25);
+      const tip = add(start, [reach, 0, 0]);
+      line(start, tip, rgb, 2.5);
+      line(tip, add(tip, [-reach * 0.15, reach * 0.08, 0]), rgb, 2.5);
+      line(tip, add(tip, [-reach * 0.15, -reach * 0.08, 0]), rgb, 2.5);
+      text(tip, 'front +X', rgb);
     }
 
     // The world axes, in the corner: X red, Y green, Z blue.
