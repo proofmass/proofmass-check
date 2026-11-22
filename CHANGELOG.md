@@ -8,22 +8,18 @@ and the spec version.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-22
+
+The checks follow docs/spec.md, version 0.3. No rule or number changed. The spec gained the
+measurements of each check (section 6).
+
 ### Added
 
-- `proofmass-check gui`: a page in the browser that shows results files, phase 1 of
-  [docs/gui.md](docs/gui.md). It opens folders and finds every results file below them, whatever
-  its name. It shows a matrix of runs and checks, the page of one run, a comparison of runs (PhysX
-  and Newton, two versions, repeats), and a comparison of two folders paired by the asset's SHA-256.
-  It saves a report as one HTML file or as CSV. It never changes an asset or a results file. The
-  server listens on 127.0.0.1 only and needs the token from the address it prints. It needs
-  nothing beyond the standard library.
-- The GUI runs checks too, phase 2 of docs/gui.md. Settings keep the Python of each engine and a
-  workspace. A new batch lists the USD files of a folder, takes the engines, the Newton repeats and
-  the settings, and shows the command of each run before it starts. The batch's page shows each
-  asset of each run live: the check, its step and the time so far. Runs go one at a time, and a run
-  can be cancelled. When a worker crashes in the middle of an asset, that asset is marked as
-  stopped and a new worker runs the rest. The GUI reads the state of a batch from its files, so it
-  can read it again after a restart. It never accepts the NVIDIA licence for the user.
+- `measurements` in `results.json`: each check that ran lists the numbers it compared with its
+  rule, each with its limit, bound, unit and `ok` (docs/spec.md, section 6). A program can now read
+  them without the detail text, whose wording can change. The GUI uses them for the margin of each
+  joint. It is a new optional field, so `schema_version` stays 1. The verdicts and the detail text
+  do not change.
 - `proofmass-check run` takes several assets, and runs them in one start of the engine. Isaac Sim
   can take a minute to start, and it started once per asset before. With several assets, `--out`
   is a folder with a folder per asset. An asset that stops with an error does not stop the others.
@@ -31,18 +27,28 @@ and the spec version.
 - `proofmass-check run --events FILE`: the progress as JSON Lines, for a program that follows a
   run: the engine's start, each asset, each check with its engine operations, each verdict, the
   end (docs/gui.md, section 5.2). `runner.run_checks()` takes the callback that writes them.
-- `measurements` in `results.json`: each check that ran lists the numbers it compared with its
-  rule, each with its limit, bound, unit and `ok` (docs/spec.md, section 6). A program can now read
-  them without the detail text, whose wording can change. The GUI uses them for the margin of each
-  joint. It is a new optional field, so `schema_version` stays 1. The verdicts and the detail text
-  do not change.
-
 - `proofmass-check inspect`: what the reader reads from an asset, and the expected plan, as JSON,
   without an engine. It gives the variant sets, the bodies, the joints with their drive and where
   it comes from (PhysicsDriveAPI or MjcActuator), the mass each joint carries and its largest
   gravity load, the applied schemas and authored attributes of each joint prim, the gripper sites,
   the wheels and the plan for one engine. `--geometry` adds the colliders. It needs pxr, so it runs
   in a Python with usd-core, not in Isaac Sim's.
+- `Joint.prim`: the path of the joint's prim in the stage.
+- `proofmass-check gui`: a page in the browser that shows results files, phase 1 of
+  [docs/gui.md](docs/gui.md). It opens folders and finds every results file below them, whatever
+  its name. It shows a matrix of runs and checks, the page of one run, a comparison of runs (PhysX
+  and Newton, two versions, repeats), and a comparison of two folders paired by the asset's SHA-256.
+  It saves a report as one HTML file or as CSV. It never changes an asset or a results file. The
+  server listens on 127.0.0.1 only and needs the token from the address it prints. It needs
+  nothing beyond the standard library. It has the look of proofmass.com: the Proofmass logo, and
+  the fonts Archivo and IBM Plex Mono, which come with the package (SIL OFL 1.1, see NOTICE).
+- The GUI runs checks too, phase 2 of docs/gui.md. Settings keep the Python of each engine and a
+  workspace. A new batch lists the USD files of a folder, takes the engines, the Newton repeats and
+  the settings, and shows the command of each run before it starts. The batch's page shows each
+  asset of each run live: the check, its step and the time so far. Runs go one at a time, and a run
+  can be cancelled. When a worker crashes in the middle of an asset, that asset is marked as
+  stopped and a new worker runs the rest. The GUI reads the state of a batch from its files, so it
+  can read it again after a restart. It never accepts the NVIDIA licence for the user.
 - The GUI's inspector, phase 3 of docs/gui.md: the plan of an asset before a run, its joints,
   bodies and attributes, and a 3D view of its colliders, joints and gripper sites. Opened from a
   run, it marks the joints whose measurements failed or came close to their limits. The 3D view
@@ -51,7 +57,6 @@ and the spec version.
   joints the checks move, push, leave without limits, or that follow another joint. inspect gives
   each joint's role (`driven`, `pushed`, `limited`), the centre of what it carries, and each gripper
   site's GRIP box.
-- `Joint.prim`: the path of the joint's prim in the stage.
 
 ### Changed
 
@@ -131,7 +136,8 @@ The first release. The checks follow docs/spec.md, version 0.2.
 - The `proofmass-check` command: `run` and `list-checks`.
 - Engines: PhysX in Isaac Sim 6.1, and Newton as an experiment.
 
-[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/proofmass/proofmass-check/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/proofmass/proofmass-check/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/proofmass/proofmass-check/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/proofmass/proofmass-check/compare/v0.1.0...v0.1.1

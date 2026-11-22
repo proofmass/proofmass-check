@@ -3,3 +3,8 @@ Copyright 2026 Paweł Kikta
 Developed by Proofmass (https://proofmass.com)
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The GUI includes two fonts, licensed under the SIL Open Font License, Version 1.1. They and their
+licences are in src/proofmass_check/gui/static/fonts:
+- Archivo, Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
+- IBM Plex Mono, Copyright 2017 IBM Corp.

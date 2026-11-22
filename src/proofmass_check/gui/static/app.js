@@ -202,6 +202,7 @@ async function route() {
 async function homeView() {
   crumbs();
   const batches = await apiJson('/api/batches');
+  state = await apiJson('/api/state');  // /api/batches read again the folders of batches whose assets ended
   const say = status();
   const input = h('input', {type: 'text', size: 70, placeholder: 'C:\\results\\lightwheel',
     'aria-label': 'The folder to open'});
@@ -614,9 +615,8 @@ async function batchView(batchId) {
   const refresh = async () => {
     b = await apiJson(`/api/batch?id=${encodeURIComponent(batchId)}`);
     if (mine !== viewNumber) return;
-    if (ended(b) !== seen) {  // an asset ended: its results.json is new, so the matrix is read again
+    if (ended(b) !== seen) {  // an asset ended: /api/batch read its new results.json, so the matrix is drawn again
       seen = ended(b);
-      await apiJson('/api/reload', {folder: b.folder});
       state = await apiJson('/api/state');
       if (mine !== viewNumber) return;
       folderView(b.folder, {name: b.name, panel});

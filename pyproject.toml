@@ -3,8 +3,8 @@ name = "proofmass-check"
 dynamic = ["version"]
 description = "Physics checks for SimReady OpenUSD assets: does the asset behave in a simulator?"
 readme = "README.md"
-license = "Apache-2.0"
-license-files = ["LICENSE", "NOTICE"]
+license = "Apache-2.0 AND OFL-1.1"  # OFL: the fonts of the GUI
+license-files = ["LICENSE", "NOTICE", "src/proofmass_check/gui/static/fonts/LICENSE-*.txt"]
 authors = [{ name = "Paweł Kikta" }]
 requires-python = ">=3.11"
 # Only numpy. pxr (OpenUSD) comes from the engine's environment: Isaac Sim brings its own build,
@@ -44,6 +44,10 @@ path = "src/proofmass_check/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/proofmass_check"]
+
+# The README shows the screenshots from GitHub, so the source package does not carry them.
+[tool.hatch.build.targets.sdist]
+exclude = ["docs/images"]
 
 [dependency-groups]
 dev = [

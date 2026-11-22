@@ -109,12 +109,23 @@ This opens a page in the browser. It finds every results file below the folder, 
 and shows a matrix of runs and checks, the page of each run, and comparisons: PhysX with Newton,
 one version with another, or two folders. It saves a report as one HTML file or as CSV.
 
+![The matrix of a folder: four assets, each run in PhysX and in Newton, with the verdict of each check](https://raw.githubusercontent.com/proofmass/proofmass-check/v0.3.0/docs/images/gui-matrix.png)
+
+The page of a run lists every measurement with its limit and how much of that limit it uses, the
+failed ones first.
+
+![The page of a run: each measurement of each joint, with its limit and a margin bar](https://raw.githubusercontent.com/proofmass/proofmass-check/v0.3.0/docs/images/gui-run.png)
+
 The page also runs checks. In its settings, give the Python of each engine once. A new batch then
 runs the assets you tick in the engines you choose, one run at a time, and shows each check as it
 runs. Its inspector shows an asset before a run: the plan, the joints, and a 3D view of the
 colliders with the joints that failed marked. The page itself runs in any Python that has
 proofmass-check, without an engine.
 [docs/gui.md](docs/gui.md) describes it.
+
+![The inspector: a 3D view of an arm's colliders, the joint that failed in red, and the range of that joint](https://raw.githubusercontent.com/proofmass/proofmass-check/v0.3.0/docs/images/gui-inspect.png)
+
+The screenshots show demo assets. Their results come from a test engine that runs no physics.
 
 ## How a run works
 
