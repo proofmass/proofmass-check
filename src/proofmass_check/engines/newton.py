@@ -24,8 +24,8 @@ import warp as wp
 from mujoco_warp import OverflowType
 from pxr import Usd
 
-from proofmass_check.checks import TITLES
 from proofmass_check.engines.base import DropOutcome, GripOutcome, GripSetup, JointState, LoadOutcome, Motion
+from proofmass_check.engines.capabilities import CAPABILITIES, supported
 from proofmass_check.geometry import quat_to_matrix
 from proofmass_check.model import Asset
 from proofmass_check.rules import GRAVITY
@@ -62,8 +62,8 @@ def _repeated_while_a_buffer_runs_out(measure):
 
 class NewtonEngine:
     name = "newton"
-    variant_sets = ("Newton", "MuJoCo")
-    reads_mjc_actuators = True  # Newton's importer turns an MjcActuator into a joint drive
+    variant_sets = CAPABILITIES["newton"].variant_sets
+    reads_mjc_actuators = CAPABILITIES["newton"].reads_mjc_actuators
 
     def __init__(self):
         self.asset: Asset | None = None
@@ -73,7 +73,7 @@ class NewtonEngine:
 
     @property
     def supported(self) -> frozenset[str]:
-        checks = set(TITLES) - {"SPEED", "STAND", "DRIVE", "TURN", "STEER"}
+        checks = set(supported("newton", self.asset))
         if self.sim is not None and not self.sim.free:
             checks.discard("DROP")  # Newton built no free joint, so there is nothing to lift
         return frozenset(checks)

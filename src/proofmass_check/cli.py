@@ -11,6 +11,7 @@ Exit status: 0 when no check failed, 1 when a check failed, 2 when the run could
 """
 
 import argparse
+import json
 import sys
 import time
 import traceback
@@ -59,6 +60,17 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--events", type=Path, metavar="FILE", help="write the progress to FILE as JSON Lines")
     run.set_defaults(func=_run)
 
+    inspect = sub.add_parser(
+        "inspect", help="print what the reader reads from an asset, and the expected plan, as JSON; no engine starts"
+    )
+    inspect.add_argument("asset", type=Path, help="the asset's root USD file")
+    inspect.add_argument("--engine", choices=sorted(engines.ENGINES), default="physx", help="the engine to plan for")
+    inspect.add_argument("--variant", action="append", default=[], metavar="SET=VALUE", help="as for run")
+    inspect.add_argument("--no-floor", action="store_true", help="as for run")
+    inspect.add_argument("--geometry", action="store_true", help="add the colliders, for a 3D view")
+    inspect.add_argument("--out", type=Path, help="write the JSON to this file (default: stdout)")
+    inspect.set_defaults(func=_inspect)
+
     listing = sub.add_parser("list-checks", help="list the checks and what each one tests")
     listing.set_defaults(func=_list_checks)
 
@@ -76,6 +88,34 @@ def _parser() -> argparse.ArgumentParser:
 def _list_checks(_args) -> int:
     for check_id, title in TITLES.items():
         print(f"{check_id:8} {title}")
+    return PASSED
+
+
+def _inspect(args) -> int:
+    if not args.asset.is_file():
+        print(f"proofmass-check: no file {args.asset}", file=sys.stderr)
+        return ERROR
+    try:
+        from proofmass_check import inspection, usd_reader
+    except ImportError as e:
+        print(
+            f"proofmass-check: inspect needs pxr ({e}). Install proofmass-check[usd] in this Python. In Isaac "
+            "Sim's Python, pxr exists only after Isaac Sim starts: use another Python.",
+            file=sys.stderr,
+        )
+        return ERROR
+    settings = Settings(floor=not args.no_floor)
+    try:
+        data = inspection.inspect_asset(args.asset, args.engine, args.variant, settings, args.geometry)
+    except usd_reader.AssetError as e:
+        print(f"proofmass-check: {e}", file=sys.stderr)
+        return ERROR
+    text = json.dumps(data, allow_nan=False)
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(text + "\n", encoding="utf-8")
+    else:
+        print(text)
     return PASSED
 
 

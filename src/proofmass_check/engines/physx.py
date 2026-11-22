@@ -19,7 +19,6 @@ from pathlib import Path
 import isaacsim  # must come before any omni or pxr import
 import numpy as np
 
-from proofmass_check.checks import TITLES
 from proofmass_check.engines.base import (
     BaseTrace,
     DropOutcome,
@@ -29,6 +28,7 @@ from proofmass_check.engines.base import (
     LoadOutcome,
     Motion,
 )
+from proofmass_check.engines.capabilities import CAPABILITIES, supported
 from proofmass_check.geometry import quat_to_matrix
 from proofmass_check.model import Asset, Joint
 from proofmass_check.rules import GRAVITY
@@ -65,8 +65,8 @@ def create() -> "PhysxEngine":
 
 class PhysxEngine:
     name = "physx"
-    variant_sets = ("PhysX",)
-    reads_mjc_actuators = False  # Isaac Sim does not read MjcActuator
+    variant_sets = CAPABILITIES["physx"].variant_sets
+    reads_mjc_actuators = CAPABILITIES["physx"].reads_mjc_actuators
 
     def __init__(self):
         apps = (Path(isaacsim.__file__).parent / "apps").as_posix()
@@ -90,9 +90,7 @@ class PhysxEngine:
 
     @property
     def supported(self) -> frozenset[str]:
-        if self.asset is not None and not self.asset.articulated:
-            return frozenset({"LOAD", "DROP", "PASSIVE"})
-        return frozenset(TITLES)
+        return supported("physx", self.asset)
 
     def version(self):
         return {"isaacsim": version("isaacsim")}

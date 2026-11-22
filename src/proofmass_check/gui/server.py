@@ -21,7 +21,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from proofmass_check import __version__, engines
-from proofmass_check.gui import batches, report, runs
+from proofmass_check.gui import batches, inspector, report, runs
 from proofmass_check.gui import settings as gui_settings
 from proofmass_check.rules import SPEC_VERSION
 
@@ -68,6 +68,7 @@ class App:
         self.settings_path = settings_path or gui_settings.settings_file()
         self.workspace = workspace
         self.batches = batches.Manager(self.settings)
+        self.inspector = inspector.Inspector()
 
     def settings(self) -> gui_settings.GuiSettings:
         found = gui_settings.load(self.settings_path)
@@ -220,6 +221,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.app.folder(body.get("a")), self.app.folder(body.get("b"))
             ),
             ("POST", "/api/report"): lambda: self._report(body),
+            ("POST", "/api/inspect"): lambda: self.app.inspector.inspect(body, self.app.settings()),
             ("GET", "/api/settings"): lambda: self._settings(),
             ("POST", "/api/settings"): lambda: self._save_settings(body),
             ("POST", "/api/check-python"): lambda: self._check_python(body),

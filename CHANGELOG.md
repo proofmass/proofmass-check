@@ -37,9 +37,24 @@ and the spec version.
   joint. It is a new optional field, so `schema_version` stays 1. The verdicts and the detail text
   do not change.
 
+- `proofmass-check inspect`: what the reader reads from an asset, and the expected plan, as JSON,
+  without an engine. It gives the variant sets, the bodies, the joints with their drive and where
+  it comes from (PhysicsDriveAPI or MjcActuator), the mass each joint carries and its largest
+  gravity load, the applied schemas and authored attributes of each joint prim, the gripper sites,
+  the wheels and the plan for one engine. `--geometry` adds the colliders. It needs pxr, so it runs
+  in a Python with usd-core, not in Isaac Sim's.
+- The GUI's inspector, phase 3 of docs/gui.md: the plan of an asset before a run, its joints,
+  bodies and attributes, and a 3D view of its colliders, joints and gripper sites. Opened from a
+  run, it marks the joints whose measurements failed or came close to their limits. The 3D view
+  is drawn on a 2D canvas, with no library.
+- `Joint.prim`: the path of the joint's prim in the stage.
+
 ### Changed
 
 - `checks.wheeled.evaluate()` gives the measurements too: (ok, detail, measurements).
+- The variant sets each engine reads, whether it reads MjcActuator, and the checks it supports on
+  an asset are in `engines/capabilities.py`, which imports no engine. The engines take them from
+  there, so the plan of `inspect` and the plan of a run cannot differ in them.
 
 ## [0.2.0] - 2026-11-18
 

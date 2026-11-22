@@ -9,6 +9,7 @@
   --fg:#141414; --muted:#474744; --dim:#5F5E5A;
   --accent:#AE4207; --fill:#E85D0E; --bar:#141414; --on-bar:#E8E7E3;
   --ok:#1E6B34; --ok-bg:#DCEBDD; --bad:#A3221B; --bad-bg:#F4DAD7; --warn:#8A5300; --warn-bg:#F3E5C8;
+  --part:#C9C7C1; --ax-x:#C8302A; --ax-y:#2E8B3E; --ax-z:#2F5FBF;
   --sans:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
   color-scheme:light;
@@ -18,6 +19,7 @@
   --fg:#EEF1F4; --muted:#A6B0BB; --dim:#8A95A1;
   --accent:#F2762E; --fill:#F2762E; --bar:#0E1116; --on-bar:#EEF1F4;
   --ok:#6FD08C; --ok-bg:#1B3325; --bad:#FF8A80; --bad-bg:#3D2220; --warn:#F5C26B; --warn-bg:#3A2F1A;
+  --part:#9AA3AD; --ax-x:#FF6B5E; --ax-y:#5FD07A; --ax-z:#6F9CFF;
   color-scheme:dark}}
 
 *,*::before,*::after{box-sizing:border-box;border-radius:0}
@@ -142,3 +144,14 @@ table.batch th button{padding:1px 8px;font-size:12px}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spinner{animation:none}}
 pre.log{border-color:var(--line);max-height:320px}
+
+/* The inspector and its 3D view */
+canvas.viewer{display:block;width:100%;height:460px;background:var(--sunk);border:1px solid var(--line);cursor:grab;touch-action:none}
+canvas.viewer:active{cursor:grabbing}
+tr.picked td{background:var(--grid)}
+tr.picked td:first-child{box-shadow:inset 3px 0 var(--accent)}
+table.joints tbody tr{cursor:pointer}
+.attributes{font:12px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 10px;padding:8px;background:var(--raised);border:1px solid var(--grid)}
+.seg{display:inline-flex;border:1px solid var(--line)}
+.seg a{padding:4px 10px;text-decoration:none;color:var(--muted);font-size:13px}
+.seg a.on{background:var(--fg);color:var(--bg)}

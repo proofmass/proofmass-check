@@ -167,3 +167,14 @@ def test_a_batch_that_cannot_start_says_why(gui, tmp_path):
     assert [f["name"] for f in found["files"]] == ["arm.usda"]
     assert api(port, "GET", "/api/batches") == []
     assert request(port, "GET", "/api/batch?id=..%2Fws")[0] == 400
+
+
+def test_inspect_an_asset(gui, tmp_path):
+    import usd_assets
+
+    port, _ = gui
+    arm = usd_assets.arm(tmp_path / "arm.usda")
+    found = api(port, "POST", "/api/inspect", {"file": str(arm), "engine": "newton"})
+    assert found["engine"] == "newton" and [j["name"] for j in found["joints"]] == ["root_joint", "arm_joint"]
+    status, _, text = request(port, "POST", "/api/inspect", {"file": str(tmp_path / "none.usda")})
+    assert status == 400 and json.loads(text)["error"].startswith("no USD file")
