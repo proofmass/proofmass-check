@@ -33,18 +33,39 @@ TITLES = {
 
 
 @dataclass(frozen=True)
+class Measurement:
+    """One number that a check compared with its rule (docs/spec.md, section 6).
+
+    value and limit are in SI units. With bound "max" the rule wants value <= limit, with "min"
+    value >= limit. limit is None for a number the check reports but does not judge, such as the
+    tilt after DROP. ok is what the check decided for this number. The check sets it with the same
+    comparison that decides its verdict, which can need more than the number: finite values, too.
+    """
+
+    subject: str  # a joint, a gripper site, or "" for the whole asset
+    case: str  # which test of the subject: "25%", "upper", "out of the fingers", or ""
+    quantity: str
+    value: float
+    limit: float | None
+    unit: str  # "m", "rad", "m/s", "rad/s", "kg", "N", "N m", or "1" for a count or a fraction
+    ok: bool
+    bound: Literal["max", "min"] = "max"
+
+
+@dataclass(frozen=True)
 class CheckResult:
     id: str
     verdict: Verdict
     detail: str
+    measurements: tuple[Measurement, ...] = ()
 
     @property
     def title(self) -> str:
         return TITLES[self.id]
 
 
-def judge(check_id: str, ok: bool, detail: str) -> CheckResult:
-    return CheckResult(check_id, "PASS" if ok else "FAIL", detail)
+def judge(check_id: str, ok: bool, detail: str, measurements=()) -> CheckResult:
+    return CheckResult(check_id, "PASS" if ok else "FAIL", detail, tuple(measurements))
 
 
 def not_applicable(check_id: str, reason: str) -> CheckResult:

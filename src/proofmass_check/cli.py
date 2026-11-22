@@ -4,6 +4,7 @@
 
     proofmass-check run asset.usd --engine physx
     proofmass-check list-checks
+    proofmass-check gui folder-with-results
 
 Exit status: 0 when no check failed, 1 when a check failed, 2 when the run could not finish.
 """
@@ -51,6 +52,12 @@ def _parser() -> argparse.ArgumentParser:
 
     listing = sub.add_parser("list-checks", help="list the checks and what each one tests")
     listing.set_defaults(func=_list_checks)
+
+    gui = sub.add_parser("gui", help="show results files in a page in the browser (docs/gui.md)")
+    gui.add_argument("folders", nargs="*", type=Path, help="folders with results files to open")
+    gui.add_argument("--port", type=int, default=0, help="the port on 127.0.0.1 (default: a free port)")
+    gui.add_argument("--no-browser", action="store_true", help="print the page's address, but do not open it")
+    gui.set_defaults(func=_gui)
     return parser
 
 
@@ -58,6 +65,16 @@ def _list_checks(_args) -> int:
     for check_id, title in TITLES.items():
         print(f"{check_id:8} {title}")
     return PASSED
+
+
+def _gui(args) -> int:
+    from proofmass_check.gui import server
+
+    try:
+        return server.serve(args.folders, args.port, open_browser=not args.no_browser)
+    except OSError as e:  # a folder that does not exist, or a port that is taken
+        print(f"proofmass-check: {e}", file=sys.stderr)
+        return ERROR
 
 
 def _run(args) -> int:

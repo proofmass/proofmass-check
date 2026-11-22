@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: 2026 Paweł Kikta
+# SPDX-License-Identifier: Apache-2.0
+import csv
+import io
+import math
+from pathlib import Path
+
+from results_files import error_results, measured, results
+
+from proofmass_check.gui import report
+from proofmass_check.gui.runs import Run
+
+
+def _run(name, data) -> Run:
+    return Run(name, Path(name), data)
+
+
+def _rows(text: str) -> list[dict]:
+    return list(csv.DictReader(io.StringIO(text)))
+
+
+def test_csv_has_a_row_for_each_check_and_each_measurement():
+    data = results(
+        verdicts={"LOAD": "PASS", "HOLD": "FAIL", "GRIP": "N/A"},
+        measurements={"HOLD": [measured("elbow", 0.03, math.radians(0.5), False)]},
+    )
+    text = report.to_csv([_run("arm.json", data), _run("stopped.json", error_results())])
+    assert text.splitlines()[0] == ",".join(report.CSV_FIELDS)
+    rows = _rows(text)
+    assert [(r["run"], r["check"], r["verdict"], r["subject"]) for r in rows] == [
+        ("arm.json", "LOAD", "PASS", ""),
+        ("arm.json", "HOLD", "FAIL", ""),
+        ("arm.json", "HOLD", "FAIL", "elbow"),
+        ("arm.json", "GRIP", "N/A", ""),
+        ("stopped.json", "", "", ""),
+    ]
+    assert rows[2]["value"] == "0.03" and rows[2]["unit"] == "rad" and rows[2]["ok"] == "False"
+    assert rows[4]["error"].endswith("the engine stopped")
+
+
+def test_csv_gives_the_file_name_unless_asked_for_the_path():
+    run = _run("arm.json", results())
+    assert _rows(report.to_csv([run]))[0]["file"] == "arm.usda"
+    assert _rows(report.to_csv([run], full_paths=True))[0]["file"] == "C:\\Users\\someone\\assets\\arm.usda"
+
+
+def test_csv_text_never_runs_as_a_formula():
+    data = results(details={"LOAD": '=HYPERLINK("http://example.com")'}, file="C:\\=evil.usda")
+    row = _rows(report.to_csv([_run("arm.json", data)]))[0]
+    assert row["detail"].startswith("'=") and row["asset"] == "'=evil"
+
+
+def test_html_escapes_the_text_of_results_files():
+    data = results(asset="<b>arm</b>", details={"LOAD": "<script>alert(1)</script>"}, notes=["<i>note</i>"])
+    page = report.to_html([_run("arm.json", data)], title="A & B", made="2026-11-22 10:00")
+    assert "<script>alert" not in page and "&lt;script&gt;alert(1)&lt;/script&gt;" in page
+    assert "<b>arm</b>" not in page and "<i>note</i>" not in page
+    assert "<title>A &amp; B</title>" in page
+
+
+def test_html_shows_every_verdict_reason_and_note():
+    data = results(
+        engine="newton",
+        verdicts={"LOAD": "PASS", "PASSIVE": "FAIL", "GRIP": "N/A"},
+        details={"PASSIVE": "door@upper 27.670 deg from the limit FAIL; door@lower 0.000 deg from the limit",
+                 "GRIP": "the asset has no gripper site (gripper_maxOpening)"},
+        notes=["settings differ from the spec: settle_s is 3.0 (spec: 1.5)"],
+    )  # fmt: skip
+    page = report.to_html([_run("arm.json", data), _run("stopped.json", error_results())], made="today")
+    assert "the asset has no gripper site (gripper_maxOpening)" in page
+    assert '<span class="fail">door@upper 27.670 deg from the limit FAIL</span><br>door@lower' in page
+    assert "settle_s is 3.0 (spec: 1.5)" in page
+    assert "Newton is experimental" in page
+    assert "RuntimeError: the engine stopped" in page
+    assert "2 runs: 0 passed, 1 failed, 1 stopped with an error" in page
+    assert "someone" not in page  # no full path, so no user name

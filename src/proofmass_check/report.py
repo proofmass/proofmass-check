@@ -8,9 +8,11 @@ away; a new optional field does not need it.
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 from proofmass_check import __version__
+from proofmass_check.checks import CheckResult, Measurement
 from proofmass_check.rules import SPEC_VERSION
 from proofmass_check.runner import Run
 
@@ -50,10 +52,41 @@ def to_dict(run: Run) -> dict:
         "floor": run.floor,
     }
     data["notes"] = list(run.notes)
-    data["checks"] = [{"id": r.id, "title": r.title, "verdict": r.verdict, "detail": r.detail} for r in run.results]
+    data["checks"] = [_check(r) for r in run.results]
     data["passed"] = run.passed
     data["seconds"] = run.seconds
     return data
+
+
+def _check(result: CheckResult) -> dict:
+    data = {"id": result.id, "title": result.title, "verdict": result.verdict, "detail": result.detail}
+    if result.measurements:
+        data["measurements"] = [_measurement(m) for m in result.measurements]
+    return data
+
+
+def _measurement(m: Measurement) -> dict:
+    return {
+        "subject": m.subject,
+        "case": m.case,
+        "quantity": m.quantity,
+        "value": _finite_or_none(m.value),
+        "limit": _finite_or_none(m.limit),
+        "bound": m.bound,
+        "unit": m.unit,
+        "ok": bool(m.ok),
+    }
+
+
+def _finite_or_none(value: float | None) -> float | None:
+    """The value, or None (null in JSON) when it is not a finite number.
+
+    JSON has no NaN or infinity, and an engine that blows up gives them. The check's detail says what
+    happened.
+    """
+    if value is None or not math.isfinite(value):
+        return None
+    return value if isinstance(value, int) else float(value)  # a count stays a whole number
 
 
 def error_dict(file: str | Path, engine: str, error: str) -> dict:

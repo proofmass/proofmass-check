@@ -8,6 +8,25 @@ and the spec version.
 
 ## [Unreleased]
 
+### Added
+
+- `proofmass-check gui`: a page in the browser that shows results files, phase 1 of
+  [docs/gui.md](docs/gui.md). It opens folders and finds every results file below them, whatever
+  its name. It shows a matrix of runs and checks, the page of one run, a comparison of runs (PhysX
+  and Newton, two versions, repeats), and a comparison of two folders paired by the asset's SHA-256.
+  It saves a report as one HTML file or as CSV. It only reads results: it never runs a check and
+  never changes a file. The server listens on 127.0.0.1 only and needs the token from the address
+  it prints. It needs nothing beyond the standard library.
+- `measurements` in `results.json`: each check that ran lists the numbers it compared with its
+  rule, each with its limit, bound, unit and `ok` (docs/spec.md, section 6). A program can now read
+  them without the detail text, whose wording can change. The GUI uses them for the margin of each
+  joint. It is a new optional field, so `schema_version` stays 1. The verdicts and the detail text
+  do not change.
+
+### Changed
+
+- `checks.wheeled.evaluate()` gives the measurements too: (ok, detail, measurements).
+
 ## [0.2.0] - 2026-11-18
 
 The checks follow docs/spec.md, version 0.3.

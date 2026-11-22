@@ -1,7 +1,7 @@
 # proofmass-check GUI: design
 
-Version 0.1 (draft). Nothing in this file is built yet. It says what the GUI does, how it is built,
-and what must change in proofmass-check before it. [spec.md](spec.md) stays the authority for the
+Version 0.2 (draft). Phase 1, the viewer, is built (section 8). The rest is not built yet. This
+file says what the GUI does, how it is built, and what must change in proofmass-check before it. [spec.md](spec.md) stays the authority for the
 checks: the GUI shows what the checks decide, and never decides itself.
 
 ## 1. Goal
@@ -113,8 +113,10 @@ The server starts processes, so a web page open in the same browser must not rea
   batch have the same name, the folder is the file's path below the folder the batch's assets
   share.
 - A batch folder does not change after the batch ends. To run again, start a new batch.
-- The GUI also opens any folder that holds `results.json` files, read-only, for example results
-  made before the GUI existed.
+- The GUI also opens any folder that holds results files, read-only, for example results made
+  before the GUI existed. A results file is any JSON file whose `tool.name` is `proofmass-check`,
+  whatever the file is called, because people rename them (`physx_results.json`). Folders whose
+  names start with "." are not read.
 
 ## 5. Changes to proofmass-check first
 
@@ -123,11 +125,14 @@ its own line in CHANGELOG.md.
 
 ### 5.1 Measurements in results.json
 
-Today each check gives one `detail` line. The GUI needs the numbers, to sort joints by margin and to
-compare runs. The detail line is text for people, and its wording changes between versions (0.1.2
-changed the text of SPEED). So the GUI never parses it.
+Built after version 0.2.0. spec.md section 6 gives the measurements of each check, and is the
+authority for them. This section says why they exist.
 
-Each check result gets an optional `measurements` array. `detail` stays as it is.
+Before, each check gave one `detail` line only. The GUI needs the numbers, to sort joints by margin
+and to compare runs. The detail line is text for people, and its wording changes between versions
+(0.1.2 changed the text of SPEED). So the GUI never parses it.
+
+Each check result has an optional `measurements` array. `detail` stays as it is.
 
 ```json
 {
@@ -143,10 +148,10 @@ Each check result gets an optional `measurements` array. `detail` stays as it is
 
 | Field | Meaning |
 |---|---|
-| `subject` | a joint name, a gripper site name, or the asset's name for a number of the whole asset |
-| `case` | which test of the subject: `25%`, `upper`, `pull out`, and so on. Empty when the subject has one. |
-| `quantity` | what was measured, from a fixed list for each check (table below) |
-| `value` | in SI units, as the rest of the file |
+| `subject` | a joint name, a gripper site name, or empty for a number of the whole asset. The asset's name is often only `root`, so it would say nothing. |
+| `case` | which test of the subject: `25%`, `upper`, `out of the fingers`, and so on. Empty when the subject has one. |
+| `quantity` | what was measured, from a fixed list for each check (spec.md section 6) |
+| `value` | in SI units, as the rest of the file. `null` when the engine gave a value that is not finite. |
 | `limit` | the rule's limit, in the same unit. `null` when the rule sets none (a tilt that DROP reports only). |
 | `bound` | `max`: the rule wants value <= limit. `min`: value >= limit. |
 | `unit` | `m`, `rad`, `m/s`, `rad/s`, `kg`, `N`, `N m`, or `1` for a count or a fraction |
@@ -156,26 +161,8 @@ Each check result gets an optional `measurements` array. `detail` stays as it is
   for example), so the GUI shows `ok` and never compares `value` and `limit` itself.
 - Values are not rounded.
 - It is a new optional field, so `schema_version` stays 1 (report.py). `results.schema.json`
-  describes it, and spec.md section 6 gives the list below once it is built.
-
-The measurements of each check, from spec.md section 4. The names are a draft.
-
-| Check | Subject | Measurement and its limit |
-|---|---|---|
-| LOAD | asset | joints the engine did not build, and engine joints not in the USD: 0 each; engine mass against USD mass, relative difference <= `MASS_TOL` when the USD gives every mass |
-| DROP | asset | root speed <= `REST_SPEED`; distance of the lowest collider from the floor <= `FLOOR_TOL`; tilt, no limit |
-| HOLD | joint | error from the rest position <= tolerance |
-| TRACK | joint, at 25 % and 75 % | error from the target <= tolerance |
-| LIMIT | joint | distance past the upper limit <= `LIMIT_TOL` tolerances |
-| STABLE | asset | unstable poses <= 0 |
-| SPEED | joint | highest speed after the first `SPEED_SKIP_STEPS` steps <= speed limit x (1 + `SPEED_TOL`); at the end, every driven joint inside its limits, give or take `LIMIT_TOL` tolerances |
-| PASSIVE | joint, at each limit | distance from the limit <= `LIMIT_TOL` tolerances; the push it needed, no limit |
-| GRIP | site, in each direction | highest load held >= `GRIP_LOAD` x `gripper_maxPayload` |
-| SHAKE | site | slip along the pads <= `GRIP_SLIP` |
-| STAND | asset | tilt <= `STAND_TILT_DEG`; speed <= `STAND_SPEED` |
-| DRIVE | asset | speed error <= `DRIVE_SPEED_TOL` of the command; drift <= `DRIVE_DRIFT_TOL` of the distance; heading change <= `DRIVE_YAW_TOL_DEG` |
-| TURN | asset | differential: yaw rate within `TURN_TOL` of the expected rate, and drift of the axle centre <= `TURN_DRIFT`. Skid steer: yaw rate above `SKID_TURN_MIN` of the expected rate, and drift <= one track width. |
-| STEER | asset | turning radius within `TURN_TOL` of the Ackermann radius |
+  describes it.
+- A check passes when all its measurements are ok, and a test holds every check to that.
 
 ### 5.2 Progress events
 
@@ -297,7 +284,8 @@ folded away.
   and it never changes a verdict. In Newton it matters most, because its results can differ from
   run to run (spec.md section 5).
 
-**Checks:** each check with its title, verdict, detail line as written, measurements, and a link to
+**Checks:** each check with its title, verdict, detail line as written (one part per line, and a
+part that ends with FAIL marked), measurements, and a link to
 its section of spec.md at the run's tool version:
 `https://github.com/proofmass/proofmass-check/blob/v<tool version>/docs/spec.md`. The `N/A` checks
 come last, each with its reason.

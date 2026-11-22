@@ -86,6 +86,18 @@ finish. `results.json` holds every verdict and number, the versions of the tool,
 engine, and the SHA-256 of the asset file.
 [src/proofmass_check/results.schema.json](src/proofmass_check/results.schema.json) describes it.
 
+## See the results
+
+```bash
+proofmass-check gui path/to/folder-with-results
+```
+
+This opens a page in the browser. It finds every results file below the folder, whatever its name,
+and shows a matrix of runs and checks, the page of each run, and comparisons: PhysX with Newton,
+one version with another, or two folders. It saves a report as one HTML file or as CSV. The page
+only reads results, and it runs in any Python that has proofmass-check, without an engine.
+[docs/gui.md](docs/gui.md) describes it.
+
 ## How a run works
 
 1. **Read.** The reader reads bodies, joints and gripper sites from the USD, with the variants

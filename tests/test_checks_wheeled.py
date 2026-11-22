@@ -67,23 +67,30 @@ def straight(speed=0.5, drift=0.0, seconds=4.0):
 
 def test_evaluate_drive(rover):
     sent = Commands({}, seconds=4.0, speed=0.5)
-    ok, detail = evaluate(rover.wheeled, "DRIVE", sent, straight())
+    ok, detail, _ = evaluate(rover.wheeled, "DRIVE", sent, straight())
     assert ok and detail == "speed 0.500 m/s (commanded 0.500), sideways drift 0 mm over 1.25 m, heading change 0.0 deg"
     assert not evaluate(rover.wheeled, "DRIVE", sent, straight(drift=0.1))[0]  # 20 % sideways
     backwards = evaluate(rover.wheeled, "DRIVE", sent, straight(speed=-0.5))
     assert not backwards[0] and backwards[1].endswith("the robot drove toward -X: turn the model so its front faces +X")
     unstable = straight()
     unstable[10, 1] = np.nan
-    assert evaluate(rover.wheeled, "DRIVE", sent, unstable) == (False, "the simulation became unstable (NaN)")
+    assert evaluate(rover.wheeled, "DRIVE", sent, unstable) == (False, "the simulation became unstable (NaN)", [])
+
+
+def test_a_robot_that_drives_backward_fails_one_measurement(rover):
+    sent = Commands({}, seconds=4.0, speed=0.5)
+    ok, _, found = evaluate(rover.wheeled, "DRIVE", sent, straight(speed=-0.5))
+    assert not ok and [m.quantity for m in found if not m.ok] == ["distance along +X"]
+    assert [m.quantity for m in found] == ["distance along +X", "speed error", "sideways drift", "heading change"]
 
 
 def test_evaluate_turn_and_stand(rover):
     t = np.arange(0, 4.0 + 1e-9, 0.02)
     turning = path(np.c_[t, np.zeros_like(t), np.zeros_like(t), 2.5 * t, np.zeros_like(t)])
-    ok, detail = evaluate(rover.wheeled, "TURN", Commands({}, speed=0.5, yaw_rate=2.5), turning)
+    ok, detail, _ = evaluate(rover.wheeled, "TURN", Commands({}, speed=0.5, yaw_rate=2.5), turning)
     assert ok and detail == "yaw rate 143.2 deg/s (expected 143.2), centre moved 0 mm"
     leaning = path(np.c_[t, np.zeros_like(t), np.zeros_like(t), np.zeros_like(t), np.full_like(t, math.radians(5))])
-    assert evaluate(rover.wheeled, "STAND", Commands({}), leaning) == (
+    assert evaluate(rover.wheeled, "STAND", Commands({}), leaning)[:2] == (
         False,
         "tilt 5.00 deg, speed 0.0 mm/s after the drop",
     )

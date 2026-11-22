@@ -52,7 +52,25 @@
                          "STAND", "DRIVE", "TURN", "STEER"]},
           "title": {"type": "string"},
           "verdict": {"enum": ["PASS", "FAIL", "N/A"]},
-          "detail": {"type": "string", "description": "The measured numbers, or why the check does not apply."}
+          "detail": {"type": "string", "description": "The measured numbers, or why the check does not apply."},
+          "measurements": {
+            "type": "array",
+            "description": "Each number the check compared with its rule (docs/spec.md, section 6). A check that did not apply has none.",
+            "items": {
+              "type": "object",
+              "required": ["subject", "case", "quantity", "value", "limit", "bound", "unit", "ok"],
+              "properties": {
+                "subject": {"type": "string", "description": "A joint, a gripper site, or empty for the whole asset."},
+                "case": {"type": "string", "description": "Which test of the subject, for example 25% or upper. Can be empty."},
+                "quantity": {"type": "string"},
+                "value": {"type": ["number", "null"], "description": "null when the engine gave a value that is not finite."},
+                "limit": {"type": ["number", "null"], "description": "The rule's limit. null for a number the check reports but does not judge."},
+                "bound": {"enum": ["max", "min"], "description": "max: the rule wants value <= limit. min: value >= limit."},
+                "unit": {"enum": ["m", "rad", "m/s", "rad/s", "kg", "N", "N m", "1"]},
+                "ok": {"type": "boolean", "description": "What the check decided for this number."}
+              }
+            }
+          }
         }
       }
     },
