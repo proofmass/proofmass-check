@@ -61,9 +61,16 @@ function sign(v, title) {
 }
 
 function result(run, big) {
-  if (run.error) return h('span', {class: `v err${big ? ' big' : ''}`, title: run.error}, 'ERROR');
-  if (run.passed) return h('span', {class: `v pass${big ? ' big' : ''}`}, '✓ PASSED');
-  return h('span', {class: `v fail${big ? ' big' : ''}`}, `✕ FAILED (${run.failed})`);
+  const size = big ? ' big' : '';
+  const main = run.error ? h('span', {class: `v err${size}`, title: run.error}, 'ERROR')
+    : run.passed ? h('span', {class: `v pass${size}`}, '✓ PASSED')
+    : h('span', {class: `v fail${size}`}, `✕ FAILED (${run.failed})`);
+  const gaps = run.engine_cannot_run || [];
+  if (!gaps.length) return main;
+  // A pass does not cover checks the engine could not run: say so next to the verdict, not only in the notes.
+  return h('span', {}, main, ' ', h('span', {class: 'badge',
+    title: `The ${run.engine} engine cannot run ${gaps.join(', ')} on this asset yet, so this result does not cover them.`},
+  `${gaps.length} not run`));
 }
 
 function order(ids) {
@@ -345,6 +352,9 @@ function folderView(folderId, batch) {
       c.errors ? h('span', {class: 'fail-text'}, `${c.errors} stopped with an error`) : null,
       h('span', {class: 'muted'}, `${seconds(runs.reduce((t, r) => t + (typeof r.seconds === 'number' ? r.seconds : 0), 0))} in all`)),
     runs.some(r => r.settings_differ) ? banner('Some runs have settings that differ from the spec. They carry the mark "settings".') : null,
+    runs.some(r => (r.engine_cannot_run || []).length)
+      ? banner('Some runs did not run every check their asset needs: their engine cannot run it yet. They carry the mark '
+        + '"not run", and a pass does not cover those checks. Run them in an engine that can.') : null,
     runs.some(r => r.engine === 'newton') ? banner(NEWTON_NOTE, true) : null,
     folder.truncated ? banner('This folder has more JSON files than the page reads. Open a folder further down.') : null,
     h('div', {class: 'toolbar'},

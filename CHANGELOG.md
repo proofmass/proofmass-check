@@ -8,8 +8,25 @@ and the spec version.
 
 ## [Unreleased]
 
+No rule or number changed: the spec stays 0.3.
+
+### Added
+
+- `engine_cannot_run` in `results.json`: the checks the asset needs that the engine cannot run
+  yet, for example STAND, DRIVE and TURN of a wheeled robot in Newton, and a note that names them.
+  Such a run could pass with only LOAD run. The GUI and the HTML report now put "N not run" next to
+  its verdict, and say that a pass does not cover those checks. It is a new optional field, so
+  `schema_version` stays 1.
+- A note in every engine but PhysX for each joint with `physxJoint:jointFriction`, which only
+  PhysX reads. Friction that holds a door still in PhysX does nothing in Newton, so PASSIVE can pass
+  there (docs/spec.md, section 5).
+
 ### Changed
 
+- HOLD marks a joint that fails with FAIL in its detail, as TRACK, LIMIT, PASSIVE and SPEED do, so
+  the GUI and the report show which joint failed.
+- DROP on an asset with no collider says "no collider to rest on the floor" instead of
+  "lowest collider +inf mm from the floor".
 - The HTML report that the GUI saves has the look of the reports on proofmass.com: the Proofmass
   logo, the counts of runs that passed, failed and stopped, and tables in Archivo and IBM Plex Mono.
   It still loads nothing: its CSS, fonts (latin letters only, 0.16 MB) and logo are in the file.

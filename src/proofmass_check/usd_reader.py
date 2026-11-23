@@ -340,6 +340,7 @@ def _read_joint(prim: Usd.Prim, stage: Usd.Stage, cache: UsdGeom.XformCache, bod
         "local_rot1": side1.rotation,
         "mimic": _mimic(prim),
         "prim": str(prim.GetPath()),
+        "physx_friction": float(_value(prim, usd_names.PHYSX_JOINT_FRICTION, 0.0) or 0.0),
     }
     type_name = prim.GetTypeName()
     if type_name in ("PhysicsRevoluteJoint", "PhysicsPrismaticJoint"):

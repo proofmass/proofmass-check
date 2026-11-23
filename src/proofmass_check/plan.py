@@ -25,6 +25,7 @@ class Plan:
     passive: tuple[Joint, ...]  # joints PASSIVE pushes
     site: GripperSite | None  # the gripper site GRIP tests
     notes: tuple[str, ...]
+    engine_cannot_run: tuple[str, ...] = ()  # checks the asset needs that the engine cannot run yet
 
     def runs(self, check_id: str) -> bool:
         return check_id not in self.skip
@@ -52,10 +53,21 @@ def make_plan(
         why = "; ".join(notes) if notes else "the asset has no gripper site (gripper_maxOpening)"
         skip["GRIP"] = skip["SHAKE"] = why
         notes = []
-    for check_id in TITLES:
-        if check_id not in supported and check_id not in skip:
-            skip[check_id] = f"the {engine} engine cannot run this check on this asset yet"
-    return Plan(skip, driven, limited, speed_limited, passive, site, tuple(notes))
+    cannot = tuple(c for c in TITLES if c not in supported and c not in skip)
+    for check_id in cannot:
+        skip[check_id] = f"the {engine} engine cannot run this check on this asset yet"
+    notes = list(notes)
+    if cannot:  # a PASS does not cover these: the run must say so where a reader of the verdict looks
+        notes.append(
+            f"the {engine} engine cannot run {', '.join(cannot)} on this asset yet, so this result does not cover them"
+        )
+    rubbing = [f"{j.name} {j.physx_friction:g}" for j in asset.joints if j.moves and j.physx_friction > 0]
+    if rubbing and engine != "physx":
+        notes.append(
+            f"only PhysX reads joint friction (physxJoint:jointFriction), so in the {engine} engine these "
+            f"joints move without it: {', '.join(rubbing)}"
+        )
+    return Plan(skip, driven, limited, speed_limited, passive, site, tuple(notes), cannot)
 
 
 def _drop_skip(asset: Asset, has_drives: bool, settings: Settings) -> dict[str, str]:

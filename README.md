@@ -43,7 +43,7 @@ A wheeled robot needs a short description of its wheels in the USD: see
 | Engine | Status | Runs in | Not yet |
 |---|---|---|---|
 | `physx` | reference engine | Isaac Sim 6.1's Python | joints between free rigid bodies get LOAD, DROP and PASSIVE only |
-| `newton` | experimental, needs an NVIDIA GPU; results can differ from run to run ([spec, section 5](docs/spec.md#5-engines)) | a Python with `newton[sim,importers]` | SPEED; STAND, DRIVE, TURN, STEER; the single axes of a D6 joint |
+| `newton` | experimental, needs an NVIDIA GPU; results can differ from run to run ([spec, section 5](docs/spec.md#5-engines)) | a Python with `newton[sim,importers]` | SPEED; STAND, DRIVE, TURN, STEER; the single axes of a D6 joint; PhysX joint friction (`physxJoint:jointFriction`), which a note names |
 
 proofmass-check runs in the Python environment that has the engine. It does not look for other
 Python installations.
@@ -86,7 +86,9 @@ proofmass-check list-checks
 Several assets run in one start of the engine, which saves the start of Isaac Sim for each. The
 exit status is 0 when no check failed, 1 when a check failed, and 2 when the run could not
 finish. With several assets, it is the highest of theirs. `results.json` holds every verdict and
-number, the versions of the tool, the spec and the engine, and the SHA-256 of the asset file.
+number, the versions of the tool, the spec and the engine, and the SHA-256 of the asset file. When
+the engine cannot run a check the asset needs, `engine_cannot_run` and a note name it: a pass does
+not cover it.
 [src/proofmass_check/results.schema.json](src/proofmass_check/results.schema.json) describes it.
 
 To see what the checks will read and which of them will run, before a run and without an engine:

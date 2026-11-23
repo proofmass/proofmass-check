@@ -25,6 +25,7 @@ def test_a_full_run_on_the_gripper(gripper, tmp_path):
     data = report.to_dict(run)
     jsonschema.validate(data, SCHEMA)
     assert data["asset"]["name"] == "unit_gripper" and len(data["asset"]["sha256"]) == 64
+    assert data["engine_cannot_run"] == []
     assert data["engine"] == {"name": "fake", "versions": {"fake": "1"}}
     path = report.write(data, tmp_path / "out")
     assert json.loads(path.read_text(encoding="utf-8")) == data
@@ -64,3 +65,16 @@ def test_results_after_an_error(prop, tmp_path):
     data = report.error_dict(asset_file, "physx", "Traceback ...")
     jsonschema.validate(data, SCHEMA)
     assert data["passed"] is False
+
+
+def test_checks_the_engine_cannot_run_are_in_the_results(gripper):
+    class NoGrip(IdealEngine):
+        supported = IdealEngine.supported - {"GRIP", "SHAKE"}
+
+    run = run_checks(NoGrip(), gripper, Settings())
+    assert run.passed and run.engine_cannot_run == ("GRIP", "SHAKE")
+    data = report.to_dict(run)
+    jsonschema.validate(data, SCHEMA)
+    assert data["engine_cannot_run"] == ["GRIP", "SHAKE"]
+    note = "the fake engine cannot run GRIP, SHAKE on this asset yet, so this result does not cover them"
+    assert note in data["notes"]

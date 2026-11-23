@@ -106,6 +106,12 @@ def to_html(runs: list[Run], title: str = "proofmass-check results", full_paths:
         "<h2>Runs</h2><p class=sub>A column for each check: ✓ passed, ✕ failed, · N/A.</p>",
         _matrix(runs_details),
     ]
+    incomplete = sum(bool(d.get("engine_cannot_run")) for d in runs_details)
+    if incomplete:
+        parts.append(
+            f"<p class=callout>{incomplete} of these runs did not run every check their asset needs: their engine "
+            "cannot run it yet. They carry the mark &quot;not run&quot;, and a pass does not cover those checks.</p>"
+        )
     parts += [_run_section(i, d, full_paths) for i, d in enumerate(runs_details)]
     return _PAGE.format(
         title=escape(title),
@@ -123,12 +129,22 @@ def _verdict(verdict: str) -> str:
 
 
 def _result(d: dict) -> str:
-    """The result of a run: passed, failed with the number of failed checks, or stopped with an error."""
+    """The result of a run: passed, failed with the number of failed checks, or stopped with an error.
+
+    A run whose engine could not run every check its asset needs carries "N not run" next to it.
+    """
     if d["error"]:
-        return '<span class="v err">error</span>'
-    if d["passed"]:
-        return '<span class="v pass">✓ passed</span>'
-    return f'<span class="v fail">✕ failed ({d["failed"]})</span>'
+        main = '<span class="v err">error</span>'
+    elif d["passed"]:
+        main = '<span class="v pass">✓ passed</span>'
+    else:
+        main = f'<span class="v fail">✕ failed ({d["failed"]})</span>'
+    gaps = d.get("engine_cannot_run", [])
+    if not gaps:
+        return main
+    names = ", ".join(gaps)
+    why = f"The {d['engine']} engine cannot run {names} on this asset yet, so this result does not cover them."
+    return f'{main} <span class=badge title="{escape(why)}">{len(gaps)} not run: {escape(names)}</span>'
 
 
 def _matrix(runs_details: list[dict]) -> str:
@@ -314,6 +330,8 @@ td.detail{font:12.5px/1.6 var(--f-mono);overflow-wrap:anywhere}
 white-space:nowrap}
 .v.pass{color:var(--ok);background:var(--ok-bg)}.v.fail,.v.err{color:var(--bad);background:var(--bad-bg)}
 .v.na{color:var(--dim);padding-left:0}
+.badge{display:inline-block;font:500 11px/18px var(--f-mono);padding:0 6px;border:1px solid var(--accent);
+color:var(--accent);white-space:nowrap}
 .pass{color:var(--ok)}.fail{color:var(--bad)}.na{color:var(--dim)}
 dl.facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 18px;margin:16px 0;font-size:14px}
 dt{color:var(--dim)}dd{margin:0;font:13px var(--f-mono);overflow-wrap:anywhere}

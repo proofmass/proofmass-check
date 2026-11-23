@@ -181,3 +181,14 @@ def test_files_that_are_not_assets(tmp_path):
     stage.Save()
     with pytest.raises(AssetError, match="no rigid body"):
         read_asset(tmp_path / "visual.usda")
+
+
+def test_physx_joint_friction(tmp_path):
+    path = usd_assets.cabinet(tmp_path / "cabinet.usda")
+    stage = Usd.Stage.Open(str(path))
+    hinge = stage.GetPrimAtPath("/unit_cabinet/door_joint")
+    hinge.CreateAttribute("physxJoint:jointFriction", Sdf.ValueTypeNames.Float).Set(5.0)
+    stage.Save()
+    asset = read_asset(path)
+    assert asset.joint("door_joint").physx_friction == pytest.approx(5.0)
+    assert asset.joint("drawer_joint").physx_friction == 0.0

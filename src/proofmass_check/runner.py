@@ -31,6 +31,7 @@ class Run:
     results: tuple[CheckResult, ...]
     notes: tuple[str, ...]
     seconds: float
+    engine_cannot_run: tuple[str, ...] = ()  # checks the asset needs that the engine cannot run yet
 
     @property
     def passed(self) -> bool:
@@ -81,6 +82,7 @@ def run_checks(engine: Engine, asset: Asset, settings: Settings, events: Callabl
         results=tuple(results[check_id] for check_id in TITLES),
         notes=tuple(notes),
         seconds=round(time.monotonic() - start, 1),
+        engine_cannot_run=plan.engine_cannot_run,
     )
 
 

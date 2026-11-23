@@ -52,6 +52,7 @@ def to_dict(run: Run) -> dict:
         "floor": run.floor,
     }
     data["notes"] = list(run.notes)
+    data["engine_cannot_run"] = list(run.engine_cannot_run)
     data["checks"] = [_check(r) for r in run.results]
     data["passed"] = run.passed
     data["seconds"] = run.seconds

@@ -36,7 +36,8 @@ def hold(engine: Engine, driven: Sequence[Joint], settings: Settings) -> CheckRe
         error, tolerance = abs(state.positions[joint.name] - joint.rest), settings.tolerance(joint.revolute)
         ok = state.finite and error <= tolerance
         measurements.append(Measurement(joint.name, "", "error", error, tolerance, text.si_unit(joint), ok))
-    detail = "; ".join(f"{m.subject} {text.error(j, m.value)}" for j, m in zip(driven, measurements, strict=True))
+    rows = [f"{m.subject} {text.error(j, m.value)}" for j, m in zip(driven, measurements, strict=True)]
+    detail = "; ".join(row + ("" if m.ok else " FAIL") for row, m in zip(rows, measurements, strict=True))
     return judge("HOLD", all(m.ok for m in measurements), detail, measurements)
 
 
