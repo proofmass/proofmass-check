@@ -75,7 +75,7 @@ def test_a_drift_back_to_zero_fails_hold(arm):
         def settle(self, targets, seconds):
             return JointState({n: 0.0 for n in targets}, finite=True, max_speed=0.0)
 
-    assert hold(engine_for(arm, DriftsToZero), [hinge], SETTINGS).detail == "arm_joint 10.000 deg"
+    assert hold(engine_for(arm, DriftsToZero), [hinge], SETTINGS).detail == "arm_joint 10.000 deg FAIL"
 
 
 def test_moves_get_the_time_their_speed_limit_needs(arm):

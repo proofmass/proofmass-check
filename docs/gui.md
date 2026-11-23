@@ -280,7 +280,9 @@ the matrix of a folder.
 - **Matrix:** one row per asset and engine, one column per check. The four wheeled checks share one
   column that opens into four. A cell shows PASS, FAIL, `N/A`, error, running or waiting, as a
   colour and a sign, never as a colour only.
-- **Each row:** the run's verdict, its seconds, and its highest margin.
+- **Each row:** the run's verdict, its seconds, and its highest margin. A run with
+  `engine_cannot_run` carries "N not run" next to its verdict, and a banner above the matrix says
+  that a pass does not cover those checks (spec.md, section 5).
 - **Filters:** only failed runs, one check, text in the asset name.
 - **A cell:** shows the check's detail line on hover. A click on a row opens the asset view.
 - **Live (phase 2):** above the matrix, a table of the batch's assets and runs. A running asset
@@ -377,7 +379,8 @@ Two or more runs side by side: verdicts, and with measurements, the values and t
   measurements.
 - **Content:** versions, SHA-256, settings and their differences from the spec, notes, every
   verdict with its detail, every `N/A` with its reason. The report leaves out nothing from
-  `results.json`, and adds no verdict of its own.
+  `results.json`, and adds no verdict of its own. A run with `engine_cannot_run` carries
+  "N not run" and the checks' names next to its result, in the matrix and in its section.
 - **Paths:** `results.json` holds the full path of the asset, which can hold a user name. The report
   shows the file name only, unless the user asks for full paths.
 - **Look:** that of the reports on proofmass.com, for a report that goes to a customer. The file

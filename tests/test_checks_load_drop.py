@@ -62,3 +62,11 @@ def test_drop(prop):
     engine.open(prop, floor)
     sunk = drop(engine, prop, floor)
     assert sunk.verdict == "FAIL" and sunk.detail.startswith("final speed 2.0000 m/s, lowest collider -500.00 mm")
+
+    bare = {path: dataclasses.replace(b, hulls=(), cylinders=()) for path, b in prop.bodies.items()}
+    no_collider = dataclasses.replace(prop, bodies=bare)
+    engine = Sinks()
+    engine.open(no_collider, floor)
+    falls = drop(engine, no_collider, floor)
+    assert falls.verdict == "FAIL"
+    assert falls.detail == "final speed 2.0000 m/s, no collider to rest on the floor, tilted 0 deg"

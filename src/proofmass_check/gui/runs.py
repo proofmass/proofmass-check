@@ -166,6 +166,7 @@ def summary(run: Run) -> dict:
         "details": {c["id"]: c["detail"] for c in checks},
         "failed": sum(c["verdict"] == "FAIL" for c in checks),
         "settings_differ": any(str(n).startswith(SETTINGS_NOTE) for n in data.get("notes", [])),
+        "engine_cannot_run": list(data.get("engine_cannot_run", [])),  # tool 0.3.0 and older do not write it
         "measured": bool(found),
         "worst_margin": max(margins) if margins else None,
     }

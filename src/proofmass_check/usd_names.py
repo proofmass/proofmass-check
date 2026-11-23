@@ -13,6 +13,7 @@ JOINT_STATE_POSITION = "state:{dof}:physics:position"
 
 # PhysX (Isaac Sim): the speed limit of a joint, deg/s for a revolute joint, m/s for a prismatic one.
 PHYSX_MAX_JOINT_VELOCITY = "physxJoint:maxJointVelocity"
+PHYSX_JOINT_FRICTION = "physxJoint:jointFriction"  # only PhysX reads it: a note says so in the other engines
 
 # PhysX mimic joint, one per axis: physxMimicJoint:<axis>:referenceJoint (a relationship to the
 # leader) and physxMimicJoint:<axis>:gearing. PhysX keeps follower + gearing x leader = 0.

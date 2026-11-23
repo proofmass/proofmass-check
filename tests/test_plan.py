@@ -1,5 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Paweł Kikta
 # SPDX-License-Identifier: Apache-2.0
+import dataclasses
+
 from proofmass_check.checks import TITLES
 from proofmass_check.plan import make_plan
 from proofmass_check.rules import Settings
@@ -41,3 +43,20 @@ def test_no_floor_and_checks_an_engine_cannot_run(prop, arm):
     assert make_plan(prop, "fake", ALL, Settings(floor=False)).skip["DROP"] == "the run has no floor (--no-floor)"
     plan = make_plan(arm, "newton", ALL - {"SPEED"}, Settings())
     assert plan.skip["SPEED"] == "the newton engine cannot run this check on this asset yet"
+    assert plan.engine_cannot_run == ("SPEED",)
+    assert "the newton engine cannot run SPEED on this asset yet, so this result does not cover them" in plan.notes
+    assert make_plan(arm, "fake", ALL, Settings()).engine_cannot_run == ()
+    # a check the asset does not need is not one the engine could not run
+    assert make_plan(prop, "newton", ALL - {"SPEED"}, Settings()).engine_cannot_run == ()
+
+
+def test_physx_joint_friction_is_noted_in_the_engines_that_do_not_read_it(cabinet):
+    door = dataclasses.replace(cabinet.joint("door_joint"), physx_friction=5.0)
+    rubbing = dataclasses.replace(cabinet, joints=tuple(door if j.name == door.name else j for j in cabinet.joints))
+    note = (
+        "only PhysX reads joint friction (physxJoint:jointFriction), so in the newton engine these joints move "
+        "without it: door_joint 5"
+    )
+    assert note in make_plan(rubbing, "newton", ALL, Settings()).notes
+    assert not any("jointFriction" in n for n in make_plan(rubbing, "physx", ALL, Settings()).notes)
+    assert not any("jointFriction" in n for n in make_plan(cabinet, "newton", ALL, Settings()).notes)

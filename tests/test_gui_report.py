@@ -59,6 +59,18 @@ def test_html_escapes_the_text_of_results_files():
     assert "<title>A &amp; B</title>" in page
 
 
+def test_html_marks_a_pass_that_does_not_cover_every_check():
+    wheeled = {"LOAD": "PASS", "STAND": "N/A", "DRIVE": "N/A", "TURN": "N/A"}
+    rover = results("rover", "newton", verdicts=wheeled, engine_cannot_run=["STAND", "DRIVE", "TURN"])
+    page = report.to_html([_run("rover.json", rover), _run("arm.json", results())], made="today")
+    assert '<span class="v pass">✓ passed</span> <span class=badge' in page
+    assert ">3 not run: STAND, DRIVE, TURN</span>" in page
+    assert "The newton engine cannot run STAND, DRIVE, TURN on this asset yet" in page
+    assert "1 of these runs did not run every check their asset needs" in page
+    assert page.count(" not run: ") == 2  # the matrix and the rover's section; the arm has no mark
+    assert "did not run every check" not in report.to_html([_run("arm.json", results())], made="today")
+
+
 def test_html_shows_every_verdict_reason_and_note():
     data = results(
         engine="newton",

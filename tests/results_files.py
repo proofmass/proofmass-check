@@ -17,8 +17,11 @@ def results(
     spec="0.3",
     notes=(),
     file=None,
+    engine_cannot_run=None,
 ) -> dict:
-    """A results file. verdicts: {check ID: verdict}. measurements: {check ID: [measurement, ...]}."""
+    """A results file. verdicts: {check ID: verdict}. measurements: {check ID: [measurement, ...]}.
+
+    engine_cannot_run: left out by default, as tool 0.3.0 and older leave it out."""
     verdicts = verdicts or {"LOAD": "PASS", "HOLD": "PASS"}
     checks = []
     for check_id, verdict in verdicts.items():
@@ -31,7 +34,7 @@ def results(
         if measurements and check_id in measurements:
             check["measurements"] = measurements[check_id]
         checks.append(check)
-    return {
+    data = {
         "schema_version": 1,
         "tool": {"name": "proofmass-check", "version": tool},
         "spec_version": spec,
@@ -43,6 +46,9 @@ def results(
         "passed": all(v != "FAIL" for v in verdicts.values()),
         "seconds": 12.5,
     }
+    if engine_cannot_run is not None:
+        data["engine_cannot_run"] = list(engine_cannot_run)
+    return data
 
 
 def error_results(asset="arm", engine="physx", sha="b" * 64) -> dict:

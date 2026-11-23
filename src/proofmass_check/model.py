@@ -114,6 +114,7 @@ class Joint:
     upper: float = math.inf
     rest: float = 0.0  # PhysicsJointStateAPI position, else 0
     max_speed: float = math.inf  # rad/s or m/s
+    physx_friction: float = 0.0  # physxJoint:jointFriction, a coefficient that only PhysX reads
     drive: Drive | None = None  # its PhysicsDriveAPI
     mjc_drive: Drive | None = None  # the drive its MjcActuator gives, for an engine that reads one
     mimic: Mimic | None = None

@@ -226,7 +226,8 @@ Speeds and rates are measured after a start-up of `STARTUP_S` = 1.5 s, or of
 ## 5. Engines
 
 Every engine runs the same plan and the same rules. An engine that cannot run a check yet reports
-`N/A` for it.
+`N/A` for it. When the asset needs that check, the run also names it in `engine_cannot_run` and in a
+note: a PASS does not cover it, and a report must say so next to the verdict, not only in the notes.
 
 | Engine | Status | Physics step | Not run yet |
 |---|---|---|---|
@@ -241,12 +242,16 @@ Two things about Newton that a reader of its results must know:
 - **Joint limits are soft.** When the USD does not set them, Newton's limits are stiff springs with
   little damping. A joint without damping or friction can bounce between its limits and not come
   to rest at one, so PASSIVE fails. In PhysX the same joint stops at the limit.
+- **PhysX joint friction is not read.** `physxJoint:jointFriction` is a PhysX attribute. Newton
+  moves the joint without it, so a joint that friction holds still in PhysX can pass PASSIVE in
+  Newton. A note names each joint that has it, with its value, in every engine but PhysX.
 
 ## 6. Results
 
 `results.json` follows `src/proofmass_check/results.schema.json`. It records the spec version,
 the tool and engine versions, the SHA-256 of the asset's root file, the variants, the settings,
-every verdict with its detail, and notes.
+every verdict with its detail, and notes. `engine_cannot_run` lists the checks the asset needs that
+the engine cannot run yet (section 5). Results of tool 0.3.0 and older do not have it.
 
 **Measurements.** Each check that ran also lists the numbers it compared with its rule, so that a
 program can read them without the detail text. A measurement has a subject (a joint, a gripper

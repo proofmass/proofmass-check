@@ -42,6 +42,12 @@
       }
     },
     "notes": {"type": "array", "items": {"type": "string"}},
+    "engine_cannot_run": {
+      "type": "array",
+      "description": "Checks that apply to the asset but that the engine cannot run yet: they are N/A, and a PASS does not cover them (docs/spec.md, section 5). Older results do not have it.",
+      "items": {"enum": ["LOAD", "DROP", "HOLD", "TRACK", "LIMIT", "STABLE", "SPEED", "PASSIVE", "GRIP", "SHAKE",
+                         "STAND", "DRIVE", "TURN", "STEER"]}
+    },
     "checks": {
       "type": "array",
       "items": {
