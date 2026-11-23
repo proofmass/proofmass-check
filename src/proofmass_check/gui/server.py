@@ -22,7 +22,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from proofmass_check import __version__, engines
-from proofmass_check.gui import batches, inspector, report, runs
+from proofmass_check.gui import batches, brand, inspector, report, runs
 from proofmass_check.gui import settings as gui_settings
 from proofmass_check.rules import SPEC_VERSION
 
@@ -354,7 +354,10 @@ class Handler(BaseHTTPRequestHandler):
         inside = "/" not in name or FONT.fullmatch(name)
         if not inside or "\\" in name or file.suffix not in TYPES or not file.is_file():
             return self._send_json(HTTPStatus.NOT_FOUND, {"error": f"no file {path}"})
-        self._send(HTTPStatus.OK, TYPES[file.suffix], file.read_bytes())
+        body = file.read_bytes()
+        if name == "index.html":
+            body = body.replace(b"<!--logo-->", brand.logo().encode("utf-8"))
+        self._send(HTTPStatus.OK, TYPES[file.suffix], body)
 
     def _send_json(self, status: HTTPStatus, payload) -> None:
         body = json.dumps(runs.finite_json(payload), allow_nan=False).encode("utf-8")

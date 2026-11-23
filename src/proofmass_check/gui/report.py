@@ -9,11 +9,13 @@ results.json can hold the user's name.
 
 import csv
 import io
+import math
 import re
 from datetime import datetime
 from html import escape
 
 from proofmass_check import __version__
+from proofmass_check.gui import brand
 from proofmass_check.gui.runs import Run, check_order, details
 
 CSV_FIELDS = (
@@ -75,20 +77,44 @@ def _cell(value):
 
 
 def to_html(runs: list[Run], title: str = "proofmass-check results", full_paths: bool = False, made=None) -> str:
-    """The report as one HTML page with its CSS in it. made: when it was made, for the page's first line."""
+    """The report as one HTML page with its CSS, fonts and logo in it, in the look of the reports on proofmass.com.
+
+    made: when it was made, for the first lines of the page.
+    """
     made = made or datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %z")
     runs_details = [details(run) for run in runs]
     passed = sum(d["passed"] for d in runs_details)
     errors = sum(bool(d["error"]) for d in runs_details)
+    failed = len(runs) - passed - errors
+    engines = sorted({d["engine"] for d in runs_details})
+    meta = [f"Made {made}", f"proofmass-check {__version__}", *engines]
+    stats = [
+        (len(runs), "Runs", ""),
+        (passed, "Passed", "ok" if passed else ""),
+        (failed, "Failed", "bad" if failed else ""),
+        (errors, "Stopped with an error", "bad" if errors else ""),
+    ]
     parts = [
+        "<section class=hero><p class=eyebrow>proofmass-check results</p>",
         f"<h1>{escape(title)}</h1>",
-        f"<p class=lede>Made {escape(made)} with proofmass-check {escape(__version__)}. {len(runs)} runs: "
-        f"{passed} passed, {len(runs) - passed - errors} failed, {errors} stopped with an error. "
-        "Each check follows docs/spec.md of the version its run gives.</p>",
+        "<ul class=meta>" + "".join(f"<li>{escape(m)}</li>" for m in meta) + "</ul>",
+        "<p class=lead>Each check follows docs/spec.md of the version its run gives. A check that does not "
+        "apply to an asset is N/A, with the reason, and does not fail the run.</p></section>",
+        "<div class=stats>"
+        + "".join(f'<div class="stat {kind}"><b>{n}</b><span>{label}</span></div>' for n, label, kind in stats)
+        + "</div>",
+        "<h2>Runs</h2><p class=sub>A column for each check: ✓ passed, ✕ failed, · N/A.</p>",
         _matrix(runs_details),
     ]
     parts += [_run_section(i, d, full_paths) for i, d in enumerate(runs_details)]
-    return _PAGE.format(title=escape(title), css=_CSS, body="\n".join(parts))
+    return _PAGE.format(
+        title=escape(title),
+        favicon=brand.favicon(),
+        css=brand.report_fonts() + _CSS,
+        logo=brand.logo(),
+        body="\n".join(parts),
+        version=escape(__version__),
+    )
 
 
 def _verdict(verdict: str) -> str:
@@ -96,24 +122,32 @@ def _verdict(verdict: str) -> str:
     return f'<span class="v {css}">{SIGNS.get(verdict, "?")} {escape(verdict)}</span>'
 
 
+def _result(d: dict) -> str:
+    """The result of a run: passed, failed with the number of failed checks, or stopped with an error."""
+    if d["error"]:
+        return '<span class="v err">error</span>'
+    if d["passed"]:
+        return '<span class="v pass">✓ passed</span>'
+    return f'<span class="v fail">✕ failed ({d["failed"]})</span>'
+
+
 def _matrix(runs_details: list[dict]) -> str:
     ids = check_order(i for d in runs_details for i in d["verdicts"])
-    head = "".join(f"<th>{escape(i)}</th>" for i in ids)
+    head = "".join(f"<th class=c>{escape(i)}</th>" for i in ids)
     rows = []
     for n, d in enumerate(runs_details):
         cells = "".join(
             f'<td class="c {_css(d["verdicts"].get(i))}" title="{escape(i)}">{SIGNS.get(d["verdicts"].get(i), "")}</td>'
             for i in ids
         )
-        result = "error" if d["error"] else "passed" if d["passed"] else f"failed ({d['failed']})"
         rows.append(
             f'<tr><td><a href="#run-{n}">{escape(d["asset"])}</a></td><td>{escape(d["engine"])}</td>'
-            f"<td>{escape(d['tool_version'])}</td><td>{escape(d['spec_version'])}</td>{cells}"
-            f'<td class="{_css("FAIL" if not d["passed"] else "PASS")}">{result}</td></tr>'
+            f"<td class=mono>{escape(d['tool_version'])}</td><td class=mono>{escape(d['spec_version'])}</td>{cells}"
+            f"<td>{_result(d)}</td></tr>"
         )
     return (
-        f"<table class=matrix><thead><tr><th>Asset</th><th>Engine</th><th>Tool</th><th>Spec</th>{head}"
-        f"<th>Result</th></tr></thead><tbody>{''.join(rows)}</tbody></table>"
+        f"<div class=scroll><table class=matrix><thead><tr><th>Asset</th><th>Engine</th><th>Tool</th><th>Spec</th>"
+        f"{head}<th>Result</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
     )
 
 
@@ -128,16 +162,16 @@ def _run_section(n: int, d: dict, full_paths: bool) -> str:
         ("Variants", ", ".join(f"{k}={v}" for k, v in d["variants"].items()) or "none"),
         ("Engine", " ".join([d["engine"], *(f"{k} {v}" for k, v in d["engine_versions"].items())])),
         ("Tool and spec", f"proofmass-check {d['tool_version']}, spec {d['spec_version']}"),
-        ("Settings", ", ".join(f"{k} {v}" for k, v in d["settings"].items()) or "not recorded"),
+        ("Settings", _settings(d["settings"])),
         ("Time", f"{d['seconds']} s" if d["seconds"] is not None else "not recorded"),
     ]
     out = [
-        f'<section id="run-{n}"><h2>{escape(d["asset"])} <small>{escape(d["engine"])} · {escape(d["id"])}</small> '
-        f"{_verdict('PASS' if d['passed'] else 'FAIL')}</h2>",
-        "<dl>" + "".join(f"<dt>{escape(k)}</dt><dd>{escape(str(v))}</dd>" for k, v in facts) + "</dl>",
+        f'<section class=run id="run-{n}"><h2>{escape(d["asset"])} '
+        f"<small>{escape(d['engine'])} · {escape(d['id'])}</small> {_result(d)}</h2>",
+        "<dl class=facts>" + "".join(f"<dt>{escape(k)}</dt><dd>{escape(str(v))}</dd>" for k, v in facts) + "</dl>",
     ]
     if d["engine"] == "newton":
-        out.append(f"<p class=note>{NEWTON_NOTE}</p>")
+        out.append(f"<p class=callout>{NEWTON_NOTE}</p>")
     if d["notes"]:
         out.append("<ul class=notes>" + "".join(f"<li>{escape(str(note))}</li>" for note in d["notes"]) + "</ul>")
     if d["error"]:
@@ -145,28 +179,52 @@ def _run_section(n: int, d: dict, full_paths: bool) -> str:
     checks = sorted(d["checks"], key=lambda c: c["verdict"] == "N/A")  # N/A last, each with its reason
     if checks:
         rows = "".join(
-            f"<tr><td><b>{escape(c['id'])}</b><br><small>{escape(c['title'])}</small></td>"
-            f"<td>{_verdict(c['verdict'])}</td><td>{_detail(c['detail'])}</td></tr>"
+            f"<tr><td><span class=mono>{escape(c['id'])}</span><br><span class=na>{escape(c['title'])}</span></td>"
+            f"<td>{_verdict(c['verdict'])}</td><td class=detail>{_detail(c['detail'])}</td></tr>"
             for c in checks
         )
-        out.append(f"<table class=checks><thead><tr><th>Check</th><th>Verdict</th><th>Detail</th></tr></thead>"
-                   f"<tbody>{rows}</tbody></table>")  # fmt: skip
+        out.append(f"<div class=scroll><table class=checks><thead><tr><th>Check</th><th>Verdict</th><th>Detail</th>"
+                   f"</tr></thead><tbody>{rows}</tbody></table></div>")  # fmt: skip
     if d["measurements"]:
         rows = "".join(
-            f"<tr><td>{escape(m['subject']) or ASSET}</td><td>{escape(m['check'])}</td><td>{escape(m['case'])}</td>"
-            f"<td>{escape(m['quantity'])}</td><td class=num>{escape(m['shown_value'])}</td>"
-            f"<td class=num>{_limit(m)}</td>"
-            f"<td>{escape(m['shown_unit'])}</td><td class=num>{_margin(m['margin'])}</td>"
+            f"<tr><td class=mono>{escape(m['subject']) or ASSET}</td><td class=mono>{escape(m['check'])}</td>"
+            f"<td>{escape(m['case'])}</td><td>{escape(m['quantity'])}</td>"
+            f"<td class=num>{escape(m['shown_value'])}</td><td class=num>{_limit(m)}</td>"
+            f"<td class=mono>{escape(m['shown_unit'])}</td><td class=num>{_margin(m['margin'])}</td>"
             f"<td>{_verdict('PASS' if m['ok'] else 'FAIL')}</td></tr>"
             for m in d["measurements"]
         )
         out.append(
-            "<table class=measurements><thead><tr><th>Subject</th><th>Check</th><th>Case</th><th>Quantity</th>"
-            "<th>Value</th><th>Limit</th><th>Unit</th><th>Margin</th><th></th></tr></thead>"
-            f"<tbody>{rows}</tbody></table>"
+            "<div class=scroll><table class=measurements><thead><tr><th>Subject</th><th>Check</th><th>Case</th>"
+            "<th>Quantity</th><th class=num>Value</th><th class=num>Limit</th><th>Unit</th>"
+            "<th class=num title='How much of its limit the value uses'>Margin</th><th></th></tr></thead>"
+            f"<tbody>{rows}</tbody></table></div>"
         )
     out.append("</section>")
     return "\n".join(out)
+
+
+def _settings(settings: dict) -> str:
+    """A run's settings as the GUI gives them: tolerances in mm and deg, the floor in mm. Any other as written."""
+    parts, rest = [], dict(settings)
+
+    def number(key):
+        value = rest.pop(key, None)
+        return value if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+    if (value := number("settle_s")) is not None:
+        parts.append(f"settle {value:g} s")
+    if (value := number("linear_tol")) is not None:
+        parts.append(f"linear tolerance {round(value * 1000, 3):g} mm")
+    if (value := number("angular_tol")) is not None:
+        parts.append(f"angular tolerance {round(math.degrees(value), 3):g} deg")
+    if (value := number("random_poses")) is not None:
+        parts.append(f"{value:g} random poses")
+    if "floor" in rest:
+        floor = number("floor")
+        parts.append("no floor" if floor is None else f"floor at {floor * 1000:.1f} mm")
+    parts += [f"{key} {value}" for key, value in rest.items()]
+    return " · ".join(parts) or "not recorded"
 
 
 def _detail(detail: str) -> str:
@@ -185,38 +243,86 @@ def _limit(m: dict) -> str:
 
 
 def _margin(value: float | None) -> str:
-    return "" if value is None else f"{value:.2f}"
+    """How much of its limit a value uses, as the GUI shows it: 100 % is at the limit."""
+    return "" if value is None else f"{value:.0%}"
 
 
+# The page links to nothing it loads: its CSS, fonts, logo and favicon are in it.
 _PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title}</title><style>{css}</style></head>
-<body><main>
+<meta name="referrer" content="no-referrer"><title>{title}</title><link rel="icon" href="{favicon}">
+<style>{css}</style></head>
+<body><header class=top><div class=wrap><a class=brand href="https://proofmass.com" aria-label="Proofmass">{logo}</a>
+<span class=kind>proofmass-check report</span></div></header>
+<main class=wrap>
 {body}
-</main></body></html>
+</main>
+<footer><div class=wrap><span>Made with proofmass-check {version}</span>
+<a href="https://github.com/proofmass/proofmass-check">github.com/proofmass/proofmass-check</a></div></footer>
+</body></html>
 """
 
+# The CSS of the reports on proofmass.com: ash paper, white tables, one orange, square corners.
 _CSS = """
-:root{--bg:#E8E7E3;--raised:#F3F2EF;--line:#C4C2BC;--fg:#141414;--muted:#5F5E5A;--ok:#1E6B34;--bad:#A3221B;
---accent:#AE4207;color-scheme:light dark}
-@media (prefers-color-scheme:dark){:root{--bg:#161D25;--raised:#1C242E;--line:#2E3844;--fg:#EEF1F4;--muted:#A6B0BB;
---ok:#6FD08C;--bad:#FF8A80;--accent:#F2762E}}
+:root{--bg:#F4F4F1;--raised:#FFFFFF;--fg:#141414;--muted:#474744;--dim:#5F5E5A;--line:#D3D3CF;
+--accent:#AE4207;--fill:#E85D0E;--ok:#1E6B34;--ok-bg:#E3EFE4;--bad:#A3221B;--bad-bg:#F6E1DE;--warn:#8A5300;
+--f-body:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+--f-mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#161D25;--raised:#1C242E;--fg:#EEF1F4;--muted:#A6B0BB;--dim:#8A95A1;
+--line:#2E3844;--accent:#F2762E;--fill:#F2762E;--ok:#6FD08C;--ok-bg:#1B3326;--bad:#FF8A80;--bad-bg:#3A2124;
+--warn:#F5C26B}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 Archivo,system-ui,"Segoe UI",sans-serif}
-main{max-width:1200px;margin:0 auto;padding:32px 24px 64px}
-h1{font-size:32px;margin:0 0 8px}h2{font-size:20px;margin:40px 0 12px;padding-top:16px;border-top:2px solid var(--fg)}
-h2 small{font-weight:400;color:var(--muted);font-size:14px}
-.lede{color:var(--muted);margin:0 0 24px}
-table{border-collapse:collapse;width:100%;margin:12px 0;background:var(--raised)}
-th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
-th{font-weight:600;font-size:13px}
-.matrix td.c{text-align:center;font-family:"IBM Plex Mono",Consolas,monospace}
-.checks td:nth-child(3){font-family:"IBM Plex Mono",Consolas,monospace;font-size:13px}
-.num{text-align:right;font-family:"IBM Plex Mono",Consolas,monospace}
-.pass{color:var(--ok)}.fail{color:var(--bad)}.na{color:var(--muted)}
-.v{font-weight:600;white-space:nowrap}
-dl{display:grid;grid-template-columns:max-content 1fr;gap:2px 16px;margin:0 0 12px}
-dt{color:var(--muted)}dd{margin:0;font-family:"IBM Plex Mono",Consolas,monospace;font-size:13px;overflow-wrap:anywhere}
-.note,.notes{color:var(--accent)}
-pre{white-space:pre-wrap;background:var(--raised);border:1px solid var(--line);padding:12px;font-size:12px}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--f-body)}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+header.top{border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;justify-content:space-between;align-items:center;height:52px}
+.brand{display:inline-flex;align-items:center;color:var(--fg);text-decoration:none}
+.brand svg{display:block;height:17px;width:auto;aspect-ratio:605/74}
+.logo-word{fill:currentColor}.logo-mark{fill:var(--fill)}
+.kind{font:12px var(--f-mono);color:var(--dim)}
+.hero{padding:36px 0 8px}
+.eyebrow{font:500 12px var(--f-mono);color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px}
+h1{font-weight:700;font-stretch:90%;font-size:34px;line-height:1.1;margin:0 0 10px;letter-spacing:-.01em;
+overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;font:13px var(--f-mono);color:var(--dim);margin:0;padding:0;
+list-style:none}
+.lead{max-width:760px;color:var(--muted);margin:16px 0 0}
+h2{font-weight:650;font-stretch:95%;font-size:20px;margin:40px 0 4px;display:flex;flex-wrap:wrap;align-items:baseline;
+gap:6px 12px;overflow-wrap:anywhere}
+h2 small{font:13px var(--f-mono);color:var(--dim)}
+.sub{color:var(--dim);font-size:13px;margin:4px 0 12px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);
+border:1px solid var(--line);margin:24px 0 0}
+.stat{background:var(--raised);padding:14px 16px}
+.stat b{display:block;font:500 26px/1.2 var(--f-mono)}
+.stat span{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.stat.ok b{color:var(--ok)}.stat.bad b{color:var(--bad)}
+section.run{border-top:1px solid var(--line);margin-top:48px}
+section.run h2{margin-top:20px}
+.scroll{overflow-x:auto;border:1px solid var(--line);background:var(--raised);margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:8px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font:500 11.5px var(--f-mono);color:var(--dim);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;
+background:var(--bg)}
+td.num,th.num{text-align:right;font-family:var(--f-mono);white-space:nowrap}
+td.c,th.c{text-align:center;padding-left:4px;padding-right:4px}
+td.c{font-family:var(--f-mono)}
+td.detail{font:12.5px/1.6 var(--f-mono);overflow-wrap:anywhere}
+.mono,code{font-family:var(--f-mono);font-size:.92em}
+.v{display:inline-block;font:500 11.5px/1 var(--f-mono);padding:4px 7px;text-transform:uppercase;letter-spacing:.05em;
+white-space:nowrap}
+.v.pass{color:var(--ok);background:var(--ok-bg)}.v.fail,.v.err{color:var(--bad);background:var(--bad-bg)}
+.v.na{color:var(--dim);padding-left:0}
+.pass{color:var(--ok)}.fail{color:var(--bad)}.na{color:var(--dim)}
+dl.facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 18px;margin:16px 0;font-size:14px}
+dt{color:var(--dim)}dd{margin:0;font:13px var(--f-mono);overflow-wrap:anywhere}
+.callout{border-left:3px solid var(--fill);background:var(--raised);padding:12px 16px;margin:16px 0}
+ul.notes{padding-left:18px;color:var(--warn)}ul.notes li{margin:4px 0}
+pre{white-space:pre-wrap;background:var(--raised);border:1px solid var(--bad);padding:12px;font:12px/1.45 var(--f-mono)}
+a{color:var(--accent)}
+footer{margin:56px 0 0;border-top:1px solid var(--line)}
+footer .wrap{padding:16px;font:12px var(--f-mono);color:var(--dim);display:flex;justify-content:space-between;gap:12px;
+flex-wrap:wrap}
+@media print{body{background:#fff}.scroll{overflow:visible}}
 """

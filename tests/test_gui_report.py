@@ -3,6 +3,7 @@
 import csv
 import io
 import math
+import re
 from pathlib import Path
 
 from results_files import error_results, measured, results
@@ -72,5 +73,28 @@ def test_html_shows_every_verdict_reason_and_note():
     assert "settle_s is 3.0 (spec: 1.5)" in page
     assert "Newton is experimental" in page
     assert "RuntimeError: the engine stopped" in page
-    assert "2 runs: 0 passed, 1 failed, 1 stopped with an error" in page
+    assert '<div class="stat ok"><b>0</b>' not in page and '<div class="stat bad"><b>1</b><span>Failed</span>' in page
+    assert '<div class="stat bad"><b>1</b><span>Stopped with an error</span>' in page
     assert "someone" not in page  # no full path, so no user name
+
+
+def test_html_gives_the_settings_in_mm_and_deg():
+    data = results()
+    data["settings"] |= {"angular_tol": math.radians(0.5), "floor": None, "new_setting": 3}
+    page = report.to_html([_run("arm.json", data)], made="today")
+    assert (
+        "settle 1.5 s · linear tolerance 2 mm · angular tolerance 0.5 deg · 50 random poses · no floor · new_setting 3"
+        in page
+    )
+
+
+def test_html_is_one_file_in_the_look_of_proofmass_com():
+    page = report.to_html([_run("arm.json", results())], made="today")
+    assert 'class="logo-mark"' in page and 'class="logo-word"' in page
+    assert page.count("src:url(data:font/woff2;base64,") == 3  # Archivo, IBM Plex Mono 400 and 500
+    assert '<link rel="icon" href="data:image/svg+xml;base64,' in page
+    # It loads nothing: the only addresses are two links a reader can follow.
+    assert re.findall(r"https?://[^\s\"'<>)]+", page) == [
+        "https://proofmass.com",
+        "https://github.com/proofmass/proofmass-check",
+    ]
