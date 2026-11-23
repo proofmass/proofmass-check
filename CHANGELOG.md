@@ -8,6 +8,14 @@ and the spec version.
 
 ## [Unreleased]
 
+### Changed
+
+- The HTML report that the GUI saves has the look of the reports on proofmass.com: the Proofmass
+  logo, the counts of runs that passed, failed and stopped, and tables in Archivo and IBM Plex Mono.
+  It still loads nothing: its CSS, fonts (latin letters only, 0.16 MB) and logo are in the file.
+  Its settings read as in the GUI, the tolerances in mm and deg, and a margin is a percentage of
+  the limit, as in the GUI. The logo is in one file, `gui/logo.svg`, for the page and the report.
+
 ## [0.3.0] - 2026-11-22
 
 The checks follow docs/spec.md, version 0.3. No rule or number changed. The spec gained the
