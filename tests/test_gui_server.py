@@ -59,6 +59,7 @@ def test_the_page_needs_no_token(gui):
     port, _ = gui
     status, headers, text = request(port, "GET", "/", token=None)
     assert status == 200 and headers["Content-Type"].startswith("text/html") and "app.js" in text
+    assert 'class="logo-mark"' in text and "<!--logo-->" not in text  # the server put the logo in
     assert headers["Referrer-Policy"] == "no-referrer"
     assert "script-src 'self'" in headers["Content-Security-Policy"]
     assert request(port, "GET", "/app.js", token=None)[0] == 200

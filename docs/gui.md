@@ -380,6 +380,8 @@ Two or more runs side by side: verdicts, and with measurements, the values and t
   `results.json`, and adds no verdict of its own.
 - **Paths:** `results.json` holds the full path of the asset, which can hold a user name. The report
   shows the file name only, unless the user asks for full paths.
+- **Look:** that of the reports on proofmass.com, for a report that goes to a customer. The file
+  carries the logo and the latin files of the fonts, so it looks the same on any computer.
 
 ### 6.9 Settings (phase 2, built)
 
