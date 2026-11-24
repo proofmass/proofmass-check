@@ -18,6 +18,14 @@ import numpy as np
 from proofmass_check.model import Asset, GripperSite
 
 
+class EngineBuildError(RuntimeError):
+    """The engine cannot build this asset at all, for a reason its own message gives.
+
+    The run stops with that message as its error, without a traceback: it is about the asset and the
+    engine, not a fault of proofmass-check.
+    """
+
+
 @dataclass(frozen=True)
 class LoadOutcome:
     """How the engine built the asset.

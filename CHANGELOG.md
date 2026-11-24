@@ -14,6 +14,15 @@ and the spec version.
   the bottom right corner and shows the joint picked in the tables below. Before, a pick in the
   joints table needed a scroll back up to see it.
 
+### Fixed
+
+- When Newton's MuJoCo solver cannot build an asset, the run stops with the solver's message as its
+  error, not with a Python traceback that hides it at its end. On the Lightwheel assets: a rigid body
+  with no joint (CoffeeMachine102), and a drive with `maxForce` 0 (Sink002).
+- A Python whose Newton packages do not import, for example another version of `mujoco_warp`, now
+  gives "the newton engine needs Newton ... in this Python" with the import error, as a Python
+  without Newton does, instead of a traceback.
+
 ## [0.3.1] - 2026-11-23
 
 The checks follow docs/spec.md, version 0.3. No rule or number changed, and no verdict changes: a

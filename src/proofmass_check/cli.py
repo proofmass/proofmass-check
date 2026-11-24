@@ -200,7 +200,7 @@ def _run_in(engine, file: Path, args, settings: Settings, out: Path, events) -> 
         variants = usd_reader.choose_variants(file, engine.variant_sets, args.variant)
         asset = usd_reader.read_asset(file, variants)
         run = runner.run_checks(engine, asset, settings, events)
-    except usd_reader.AssetError as e:
+    except (usd_reader.AssetError, engines.EngineBuildError) as e:  # about the asset: its message, no traceback
         print(f"proofmass-check: {e}", file=sys.stderr)
         return _stopped(file, args.engine, str(e), out, events, started)
     except Exception:  # noqa: BLE001  the user needs results.json with the error, whatever it is
