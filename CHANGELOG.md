@@ -8,6 +8,10 @@ and the spec version.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-24
+
+The checks follow docs/spec.md, version 0.3. No rule, number or verdict changed.
+
 ### Changed
 
 - The inspector's 3D view stays in sight: when the page scrolls past it, a smaller view docks in
@@ -179,7 +183,8 @@ The first release. The checks follow docs/spec.md, version 0.2.
 - The `proofmass-check` command: `run` and `list-checks`.
 - Engines: PhysX in Isaac Sim 6.1, and Newton as an experiment.
 
-[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/proofmass/proofmass-check/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/proofmass/proofmass-check/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/proofmass/proofmass-check/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/proofmass/proofmass-check/compare/v0.1.2...v0.2.0
