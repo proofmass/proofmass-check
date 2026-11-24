@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import json
 
+import pytest
 import usd_assets
 from fake_engine import IdealEngine
 
@@ -46,3 +47,29 @@ def test_a_bad_variant_writes_results_with_the_error(tmp_path, capsys, monkeypat
     assert cli.main(["run", str(asset), "--variant", "PhysX=On", "--out", str(tmp_path / "out")]) == cli.ERROR
     data = json.loads((tmp_path / "out" / "results.json").read_text(encoding="utf-8"))
     assert data["passed"] is False and "no variant 'PhysX=On'" in data["error"]
+
+
+def test_an_asset_the_engine_cannot_build_stops_with_the_engines_message(tmp_path, capsys, monkeypatch):
+    why = "Newton's MuJoCo solver cannot build this asset: SolverMuJoCo cannot convert bodies outside articulations"
+
+    class CannotBuild(IdealEngine):
+        def open(self, asset, floor, hold_base=None):
+            raise engines.EngineBuildError(why)
+
+    monkeypatch.setattr(engines, "create", lambda name: CannotBuild())
+    asset = usd_assets.prop(tmp_path / "prop.usda")
+    assert cli.main(["run", str(asset), "--out", str(tmp_path / "out")]) == cli.ERROR
+    data = json.loads((tmp_path / "out" / "results.json").read_text(encoding="utf-8"))
+    assert data["passed"] is False and data["error"] == why  # the message, not a traceback
+    err = capsys.readouterr().err
+    assert f"proofmass-check: {why}" in err and "Traceback" not in err
+
+
+def test_an_engine_whose_packages_do_not_import(monkeypatch):
+    def broken(name):
+        raise ImportError("cannot import name 'OverflowType' from 'mujoco_warp'")
+
+    monkeypatch.setattr(engines.importlib, "import_module", broken)
+    with pytest.raises(engines.EngineUnavailableError, match="the newton engine needs Newton") as caught:
+        engines.create("newton")
+    assert "cannot import name 'OverflowType' from 'mujoco_warp'" in str(caught.value)

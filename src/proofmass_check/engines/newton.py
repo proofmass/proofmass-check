@@ -24,7 +24,15 @@ import warp as wp
 from mujoco_warp import OverflowType
 from pxr import Usd
 
-from proofmass_check.engines.base import DropOutcome, GripOutcome, GripSetup, JointState, LoadOutcome, Motion
+from proofmass_check.engines.base import (
+    DropOutcome,
+    EngineBuildError,
+    GripOutcome,
+    GripSetup,
+    JointState,
+    LoadOutcome,
+    Motion,
+)
 from proofmass_check.engines.capabilities import CAPABILITIES, supported
 from proofmass_check.geometry import quat_to_matrix
 from proofmass_check.model import Asset
@@ -197,7 +205,10 @@ class _Sim:
         self.s0, self.s1 = model.state(), model.state()
 
     def _new_solver(self, sizes):
-        self.solver = newton.solvers.SolverMuJoCo(self.model, **self.options, **sizes)
+        try:
+            self.solver = newton.solvers.SolverMuJoCo(self.model, **self.options, **sizes)
+        except ValueError as e:  # MuJoCo refuses the model it gets: a body with no joint, an empty force range
+            raise EngineBuildError(f"Newton's MuJoCo solver cannot build this asset: {' '.join(str(e).split())}") from e
         self.graph = None  # a graph runs the solver it was recorded with
 
     def grow(self) -> bool:
