@@ -855,13 +855,31 @@ async function inspectView(spec) {
 
   const rows = new Map();
   let viewer = null;
+  // The 3D view docks in a corner when the page scrolls past it, so a joint picked in a table
+  // below shows at once. The slot keeps the view's place, so the page does not jump.
+  let outOfSight = false, closed = false;
+  const dockName = h('span', {class: 'mono'}, d.name);
+  const canvas = h('canvas', {class: 'viewer', role: 'img', 'aria-label': `The colliders and joints of ${d.name} in 3D`});
+  const frame = h('div', {class: 'viewer-frame'}, canvas, h('div', {class: 'dock-bar'}, dockName,
+    h('button', {type: 'button', title: 'Scroll back to the full 3D view', onclick: () => slot.scrollIntoView({block: 'center'})}, 'Full view'),
+    h('button', {type: 'button', 'aria-label': 'Close the small 3D view', title: 'Close the small view until you pick another joint',
+      onclick: () => { closed = true; dock(); }}, '×')));
+  const slot = h('div', {class: 'viewer-slot'}, frame);
+  const dock = () => frame.classList.toggle('docked', outOfSight && !closed);
+  new IntersectionObserver(([seen]) => {
+    outOfSight = seen.intersectionRatio < 0.3;
+    if (!outOfSight) closed = false;
+    dock();
+  }, {threshold: [0, 0.3, 1]}).observe(slot);
   const pick = name => {
     for (const [n, row] of rows) row.classList.toggle('picked', n === name);
     if (viewer) viewer.select(name);
+    dockName.textContent = name || d.name;
+    closed = false;
+    dock();
     const row = rows.get(name);
     if (row) row.scrollIntoView({block: 'nearest'});
   };
-  const canvas = h('canvas', {class: 'viewer', role: 'img', 'aria-label': `The colliders and joints of ${d.name} in 3D`});
   const sets = Object.entries(d.variant_sets);
   const byPath = Object.fromEntries(d.bodies.map(b => [b.path, b.name]));
   const moving = d.joints.filter(j => j.kind !== 'fixed');
@@ -915,10 +933,11 @@ async function inspectView(spec) {
     sets.length ? h('p', {class: 'sub'}, 'Variant sets: ', sets.map(([k, vs]) => `${k} (${vs.join(', ')})`).join('; ')) : null,
     runName ? banner(`Joints are marked by the measurements of the run ${runName}: ${marked} failed. `
       + 'Red: a measurement failed. Amber: it passed close to its limit.', true) : null,
-    canvas,
+    slot,
     h('p', {class: 'sub'}, 'Drag to turn, Shift+drag to move, the wheel to zoom, double-click to reset. '
       + 'Click a joint here or in the table to find it and see its range: an arc or a segment, with a tick at the file pose. '
-      + 'The view shows the colliders, which are what the engine collides. Dashed: the box GRIP closes on.'),
+      + 'The view shows the colliders, which are what the engine collides. Dashed: the box GRIP closes on. '
+      + 'Below this view, a smaller one stays in the corner.'),
     h('h2', {}, 'Plan', h('span', {class: 'muted'}, `for ${engine}`)),
     banner(EXPECTED_NOTE, true),
     h('div', {class: 'scroll'}, h('table', {}, h('tbody', {}, d.plan.map(p => h('tr', {},

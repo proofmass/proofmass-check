@@ -356,6 +356,10 @@ A switch shows the plan for PhysX or for Newton.
   and the body it moves tinted the same. A click on a joint selects its row in the joints table,
   and a click on a row selects the joint.
 - **Moving the view:** drag to turn, Shift+drag to move, the wheel to zoom, double-click to reset.
+- **Docked:** when the page scrolls past the view, a smaller view stays in the bottom right corner,
+  with the selected joint's name, so a joint picked in a table below shows at once. "Full view"
+  scrolls back up; "×" closes it until the next pick. The view keeps its place on the page, so the
+  page does not jump.
 - `results.json` holds no poses, so the view shows the file pose only (section 10).
 
 ### 6.7 Compare (phase 1)

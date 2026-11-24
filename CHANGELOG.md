@@ -8,6 +8,12 @@ and the spec version.
 
 ## [Unreleased]
 
+### Changed
+
+- The inspector's 3D view stays in sight: when the page scrolls past it, a smaller view docks in
+  the bottom right corner and shows the joint picked in the tables below. Before, a pick in the
+  joints table needed a scroll back up to see it.
+
 ## [0.3.1] - 2026-11-23
 
 The checks follow docs/spec.md, version 0.3. No rule or number changed, and no verdict changes: a

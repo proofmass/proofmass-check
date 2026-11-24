@@ -168,6 +168,18 @@ pre.log{border-color:var(--line);max-height:320px}
 /* The inspector and its 3D view */
 canvas.viewer{display:block;width:100%;height:460px;background:var(--view);border:1px solid var(--line);cursor:grab;touch-action:none}
 canvas.viewer:active{cursor:grabbing}
+/* The slot keeps the view's place; the frame leaves it for a corner when the page scrolls past */
+.viewer-slot{height:460px}
+.viewer-frame{height:100%}
+.viewer-frame canvas.viewer{height:100%}
+.viewer-frame.docked{position:fixed;right:24px;bottom:24px;z-index:15;display:flex;flex-direction:column;
+  width:min(520px,calc(100vw - 48px));height:min(340px,45vh);background:var(--bg);border:1px solid var(--accent);
+  box-shadow:0 8px 28px rgba(0,0,0,.35)}
+.viewer-frame.docked canvas.viewer{flex:1;min-height:0;height:auto;border:0}
+.dock-bar{display:none}
+.viewer-frame.docked .dock-bar{display:flex;align-items:center;gap:8px;padding:4px 8px;border-top:1px solid var(--line);font-size:12px}
+.dock-bar .mono{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dock-bar button{padding:2px 8px}
 tr.picked td{background:var(--grid)}
 tr.picked td:first-child{box-shadow:inset 3px 0 var(--accent)}
 table.joints tbody tr{cursor:pointer}
