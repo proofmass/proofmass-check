@@ -8,6 +8,11 @@ and the spec version.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-25
+
+The checks follow docs/spec.md, version 0.3. No rule or number changed. The reader now reads sphere
+colliders, so on an asset that has them DROP and the floor height can differ from 0.3.2.
+
 ### Added
 
 - A note when an asset's joints look like wheels (no limits, a near horizontal axis, a velocity drive)
@@ -204,7 +209,8 @@ The first release. The checks follow docs/spec.md, version 0.2.
 - The `proofmass-check` command: `run` and `list-checks`.
 - Engines: PhysX in Isaac Sim 6.1, and Newton as an experiment.
 
-[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/proofmass/proofmass-check/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/proofmass/proofmass-check/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/proofmass/proofmass-check/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/proofmass/proofmass-check/compare/v0.2.0...v0.3.0
