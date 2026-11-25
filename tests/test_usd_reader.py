@@ -129,6 +129,22 @@ def test_a_box_collider_with_scale(tmp_path):
     assert hull.points.max(axis=0) == pytest.approx([0.3, 0.02, 0.2])
 
 
+def test_a_sphere_collider_with_scale(tmp_path):
+    """A ball caster or a wheel modelled as a ball: the reader keeps its centre and its largest scale."""
+    stage = usd_assets.new_stage(tmp_path / "ball.usda", "root")
+    usd_assets.body(stage, "/root/caster", (0, 0, 0.1), 0.1)
+    ball = UsdGeom.Sphere.Define(stage, "/root/caster/ball")
+    ball.GetRadiusAttr().Set(0.02)
+    ball.AddTranslateOp().Set(Gf.Vec3d(0.01, 0, 0))
+    ball.AddScaleOp().Set(Gf.Vec3f(1.0, 1.5, 1.0))
+    UsdPhysics.CollisionAPI.Apply(ball.GetPrim())
+    stage.Save()
+    body = read_asset(tmp_path / "ball.usda").bodies["/root/caster"]
+    (sphere,) = body.spheres
+    assert sphere.name == "ball" and sphere.radius == pytest.approx(0.03)
+    assert sphere.centre == pytest.approx([0.01, 0, 0]) and body.colliders == 1
+
+
 def test_a_scaled_body_keeps_its_scale_in_the_colliders(tmp_path):
     """Engines report a body's pose without scale, so the scale goes into the collider points."""
     stage = usd_assets.new_stage(tmp_path / "scaled.usda", "root")

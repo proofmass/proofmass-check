@@ -44,6 +44,7 @@ def test_geometry_for_a_3d_view(tmp_path):
     assert hulls and all(len(h["points"]) >= 4 and h["triangles"] for h in hulls)
     assert cylinders and all(c["radius"] > 0 for c in cylinders)
     assert data["wheeled"]["drive"] == "differential" and len(data["bodies"][0]["pose"]) == 4
+    assert all(b["spheres"] == [] for b in data["bodies"])  # the rover has no ball: the key is there, empty
 
 
 def test_the_plan_depends_on_the_engine(tmp_path):

@@ -47,6 +47,7 @@ def lowest_collider(body: Body, rotation: np.ndarray, position: np.ndarray) -> f
         az = float((rotation @ cyl.axis)[2])
         centre_z = float((rotation @ cyl.centre)[2] + position[2])
         lows.append(centre_z - cyl.radius * math.sqrt(max(0.0, 1 - az**2)) - cyl.height / 2 * abs(az))
+    lows += [float((rotation @ s.centre)[2] + position[2]) - s.radius for s in body.spheres]
     return min(lows, default=math.inf)
 
 

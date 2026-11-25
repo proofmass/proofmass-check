@@ -184,7 +184,12 @@ class _Sim:
         import_options = {}
         if hold_base:
             import_options = {"floating": False, "xform": wp.transform((0.0, 0.0, hold_base), wp.quat_identity())}
-        info = builder.add_usd(stage, **import_options)
+        try:
+            info = builder.add_usd(stage, **import_options)
+        except RuntimeError as e:  # Newton's importer refuses a stage with composition errors, such as a missing file
+            if not str(e).startswith("USD stage has composition errors"):
+                raise
+            raise EngineBuildError(f"Newton cannot load this asset: {' '.join(str(e).split())}") from e
         if floor is not None:
             builder.add_ground_plane(height=floor)
         self.box = _add_box(builder, box) if box else None

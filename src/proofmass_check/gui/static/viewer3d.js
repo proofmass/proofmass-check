@@ -39,7 +39,12 @@ function makeViewer(canvas, data, marks, onPick) {
     if (dot(n, sub(middle, centre)) < 0) n = scale(n, -1);
     triangles.push({p, n: unit(n), body});
   };
-  for (const body of data.bodies) {
+  // A collider written as a full render mesh (a convexHull approximation over a million points) is too much
+  // for this view: past MAX_TRIANGLES the hulls are left out, and the view says so.
+  const MAX_TRIANGLES = 100000;
+  const hullTriangles = data.bodies.reduce((n, b) => n + (b.hulls || []).reduce((m, h) => m + h.triangles.length, 0), 0);
+  const drawHulls = hullTriangles <= MAX_TRIANGLES;
+  for (const body of drawHulls ? data.bodies : []) {
     for (const hull of body.hulls || []) {
       const points = hull.points.map(p => apply(body.pose, p));
       const centre = scale(points.reduce(add, [0, 0, 0]), 1 / Math.max(points.length, 1));
@@ -66,12 +71,30 @@ function makeViewer(canvas, data, marks, onPick) {
       }
     }
   }
+  for (const body of data.bodies) {
+    for (const s of body.spheres || []) {
+      // A sphere of 8 bands and 12 sectors, in the body's frame, then in the world.
+      const at = (lat, lon) => apply(body.pose, add(s.centre, scale(
+        [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)], s.radius)));
+      const centre = apply(body.pose, s.centre);
+      for (let i = 0; i < 8; i++) {
+        const a0 = -Math.PI / 2 + (i / 8) * Math.PI, a1 = -Math.PI / 2 + ((i + 1) / 8) * Math.PI;
+        for (let k = 0; k < 12; k++) {
+          const b0 = (k / 12) * 2 * Math.PI, b1 = ((k + 1) / 12) * 2 * Math.PI;
+          for (const p of [[at(a0, b0), at(a0, b1), at(a1, b1)], [at(a0, b0), at(a1, b1), at(a1, b0)]]) {
+            outward(p, centre, body.path);
+          }
+        }
+      }
+    }
+  }
   const joints = data.joints.filter(j => j.pivot && j.direction && j.kind !== 'fixed');
 
   // The scene's size, for the camera and the length of the joint axes.
   const points = triangles.flatMap(t => t.p).concat(joints.map(j => j.pivot));
-  const low = [0, 1, 2].map(i => Math.min(...points.map(p => p[i])));
-  const high = [0, 1, 2].map(i => Math.max(...points.map(p => p[i])));
+  // A loop, not Math.min(...points): a spread of many points overflows the call stack.
+  const low = [0, 1, 2].map(i => points.reduce((m, p) => Math.min(m, p[i]), Infinity));
+  const high = [0, 1, 2].map(i => points.reduce((m, p) => Math.max(m, p[i]), -Infinity));
   const centre = scale(add(low, high), 0.5);
   const size = Math.max(Math.hypot(...sub(high, low)), 0.05);
   const home = {yaw: -0.9, pitch: 0.45, distance: size * 1.7, target: centre};
@@ -106,6 +129,12 @@ function makeViewer(canvas, data, marks, onPick) {
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, width, height);
     const colours = palette();
+    if (!drawHulls) {
+      ctx.fillStyle = css(colours.dim);
+      ctx.font = '12px "IBM Plex Mono", ui-monospace, Consolas, monospace';
+      ctx.fillText(`The hull colliders have ${hullTriangles.toLocaleString('en')} triangles, too many to draw here: `
+        + 'only spheres, cylinders and joints are drawn.', 12, 20);
+    }
     const b = basis();
     const focal = height / (2 * Math.tan((40 * Math.PI) / 360));
     const near = size * 0.01;

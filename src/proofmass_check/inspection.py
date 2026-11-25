@@ -76,7 +76,7 @@ def _body(body: Body, geometry: bool) -> dict:
         "mass": _number(body.mass),  # None: the engine computes it
         "com": _vector(body.com),
         "pose": [_vector(row) for row in body.pose],  # body frame to world, 4x4, for column vectors
-        "colliders": len(body.hulls) + len(body.cylinders),
+        "colliders": body.colliders,
     }
     if geometry:
         data["hulls"] = [
@@ -88,6 +88,7 @@ def _body(body: Body, geometry: bool) -> dict:
              "height": c.height}
             for c in body.cylinders
         ]  # fmt: skip
+        data["spheres"] = [{"name": s.name, "centre": _vector(s.centre), "radius": s.radius} for s in body.spheres]
     return data
 
 

@@ -34,6 +34,7 @@ from proofmass_check.model import (
     Hull,
     Joint,
     Mimic,
+    Sphere,
     SteeringJoint,
     Wheel,
     WheeledBase,
@@ -193,7 +194,7 @@ def _read_body(prim: Usd.Prim, cache: UsdGeom.XformCache) -> Body:
         given = api.GetCenterOfMassAttr().Get()
         if given is not None and all(map(math.isfinite, given)):  # unset reads as -inf
             com = _points(world * to_body, [given])[0]
-    hulls, cylinders = _read_colliders(prim, cache, to_body)
+    hulls, cylinders, spheres = _read_colliders(prim, cache, to_body)
     return Body(
         path=str(prim.GetPath()),
         name=prim.GetName(),
@@ -203,12 +204,13 @@ def _read_body(prim: Usd.Prim, cache: UsdGeom.XformCache) -> Body:
         com=com,
         hulls=tuple(hulls),
         cylinders=tuple(cylinders),
+        spheres=tuple(spheres),
     )
 
 
 def _read_colliders(body: Usd.Prim, cache: UsdGeom.XformCache, to_body: Gf.Matrix4d):
     """The colliders under a body prim, in the body's frame. They stop at a body nested in it."""
-    hulls, cylinders = [], []
+    hulls, cylinders, spheres = [], [], []
     below = iter(Usd.PrimRange(body, Usd.TraverseInstanceProxies()))
     for prim in below:
         if prim != body and prim.HasAPI(UsdPhysics.RigidBodyAPI):
@@ -229,13 +231,18 @@ def _read_colliders(body: Usd.Prim, cache: UsdGeom.XformCache, to_body: Gf.Matri
                     height=cyl.GetHeightAttr().Get(),
                 )
             )
+        elif prim.IsA(UsdGeom.Sphere):
+            # A sphere scaled more along one axis is an ellipsoid: the largest scale gives a sphere that holds it.
+            scale = max(np.linalg.norm(rel.TransformDir(Gf.Vec3d(*axis))) for axis in np.eye(3))
+            radius = UsdGeom.Sphere(prim).GetRadiusAttr().Get() * scale
+            spheres.append(Sphere(prim.GetName(), _points(rel, [(0.0, 0.0, 0.0)])[0], float(radius)))
         elif prim.IsA(UsdGeom.Cube):
             half = UsdGeom.Cube(prim).GetSizeAttr().Get() / 2
             hulls.append(Hull(prim.GetName(), _points(rel, half * CUBE_CORNERS), CUBE_TRIANGLES))
         elif prim.IsA(UsdGeom.Mesh):
             mesh = UsdGeom.Mesh(prim)
             hulls.append(Hull(prim.GetName(), _points(rel, mesh.GetPointsAttr().Get()), _triangles(mesh)))
-    return hulls, cylinders
+    return hulls, cylinders, spheres
 
 
 def _triangles(mesh: UsdGeom.Mesh) -> np.ndarray:
