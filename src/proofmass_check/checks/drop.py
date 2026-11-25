@@ -43,7 +43,7 @@ def drop(engine: Engine, asset: Asset, floor: float) -> CheckResult:
         Measurement("", "", "tilt", math.radians(turned), None, "rad", True),  # reported, not judged
     )
     # With no collider there is nothing to stand on the floor: the asset falls through it.
-    colliders = any(asset.bodies[path].hulls or asset.bodies[path].cylinders for path in outcome.poses)
+    colliders = any(asset.bodies[path].colliders for path in outcome.poses)
     floor_text = f"lowest collider {gap_mm:+.2f} mm from the floor" if colliders else "no collider to rest on the floor"
     return judge(
         "DROP",

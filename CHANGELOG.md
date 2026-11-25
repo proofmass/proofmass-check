@@ -18,6 +18,17 @@ and the spec version.
 - The column of each check in the GUI's matrix, and in the HTML report, says what the check does
   when the pointer rests on it: the check's title from the spec. The wheeled column lists its four.
 
+### Fixed
+
+- The reader reads sphere colliders (`UsdGeom.Sphere`), such as Jetbot's wheels and Create 3's ball
+  caster. It skipped them, so DROP and the floor height did not see those parts. inspect gives them,
+  and the 3D view draws them.
+- Newton refuses a USD stage with composition errors, such as a referenced file that is missing. The
+  run now stops with that message on one line, as for the solver's errors in 0.3.2, not a traceback.
+- The 3D view stopped with "Maximum call stack size exceeded" on an asset whose colliders are full
+  render meshes (Jetbot: 1.4 million triangles). Past 100 000 triangles it now leaves the hulls out and
+  says so.
+
 ## [0.3.2] - 2026-11-24
 
 The checks follow docs/spec.md, version 0.3. No rule, number or verdict changed.

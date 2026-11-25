@@ -41,6 +41,15 @@ class Cylinder:
 
 
 @dataclass(frozen=True, eq=False)
+class Sphere:
+    """A sphere collider, such as a ball caster or a wheel some makers model as a ball, in the frame of its body."""
+
+    name: str
+    centre: np.ndarray  # m
+    radius: float  # m
+
+
+@dataclass(frozen=True, eq=False)
 class Body:
     """A rigid body, in the pose it has in the file.
 
@@ -56,6 +65,11 @@ class Body:
     com: np.ndarray  # centre of mass in the body's frame, m (the origin when the USD does not give it)
     hulls: tuple[Hull, ...] = ()
     cylinders: tuple[Cylinder, ...] = ()
+    spheres: tuple[Sphere, ...] = ()
+
+    @property
+    def colliders(self) -> int:
+        return len(self.hulls) + len(self.cylinders) + len(self.spheres)
 
 
 @dataclass(frozen=True)

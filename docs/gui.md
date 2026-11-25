@@ -344,7 +344,8 @@ A switch shows the plan for PhysX or for Newton.
 
 ### 6.6 3D view (phase 3, built)
 
-- **Colliders** from `inspect --geometry`: hulls and cylinders in the file pose. No render meshes:
+- **Colliders** from `inspect --geometry`: hulls, cylinders and spheres in the file pose. Past 100 000
+  hull triangles (a collider that is a full render mesh), the view leaves the hulls out and says so. No render meshes:
   the view shows what the engine collides, which is what the checks test.
 - **Joints:** pivot and axis. The selected joint shows its range where the body it moves goes:
   an arc about its axis through the centre of what it carries (revolute), or a segment along its

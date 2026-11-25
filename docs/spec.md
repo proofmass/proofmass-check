@@ -43,7 +43,8 @@ The reader never repairs the asset. It reads the USD as an engine would:
 - It selects the engine's variant set (`PhysX` for PhysX; `Newton`, else `MuJoCo`, for Newton)
   when the asset has an `Enabled` variant in it, then each `--variant` the user gives.
 - A rigid body is a prim with PhysicsRigidBodyAPI. Its colliders are the prims with
-  PhysicsCollisionAPI below it, down to the next rigid body: meshes, cubes and cylinders.
+  PhysicsCollisionAPI below it, down to the next rigid body: meshes, cubes, cylinders and spheres. A
+  scaled sphere takes its largest scale.
 - A mass of 0, or no PhysicsMassAPI, means the engine computes the mass. LOAD then reads it from
   the engine.
 - A joint that targets a prim inside a body means that body.
