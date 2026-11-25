@@ -65,12 +65,20 @@ function result(run, big) {
   const main = run.error ? h('span', {class: `v err${size}`, title: run.error}, 'ERROR')
     : run.passed ? h('span', {class: `v pass${size}`}, '✓ PASSED')
     : h('span', {class: `v fail${size}`}, `✕ FAILED (${run.failed})`);
+  // A pass does not cover what did not run: say so next to the verdict, not only in the notes.
   const gaps = run.engine_cannot_run || [];
-  if (!gaps.length) return main;
-  // A pass does not cover checks the engine could not run: say so next to the verdict, not only in the notes.
-  return h('span', {}, main, ' ', h('span', {class: 'badge',
-    title: `The ${run.engine} engine cannot run ${gaps.join(', ')} on this asset yet, so this result does not cover them.`},
-  `${gaps.length} not run`));
+  const wheels = run.wheels_without_mobile || [];
+  const marks = [
+    gaps.length ? h('span', {class: 'badge',
+      title: `The ${run.engine} engine cannot run ${gaps.join(', ')} on this asset yet, so this result does not cover them.`},
+    `${gaps.length} not run`) : null,
+    wheels.length ? h('span', {class: 'badge',
+      title: `${wheels.join(', ')} look like wheels, but the asset has no SimReady_Metadata.mobile, `
+        + 'so STAND, DRIVE, TURN and STEER did not run (docs/wheeled-robots.md).'},
+    'wheels not checked') : null,
+  ].filter(Boolean);
+  if (!marks.length) return main;
+  return h('span', {}, main, marks.map(m => [' ', m]));
 }
 
 function order(ids) {
@@ -359,6 +367,9 @@ function folderView(folderId, batch) {
     runs.some(r => (r.engine_cannot_run || []).length)
       ? banner('Some runs did not run every check their asset needs: their engine cannot run it yet. They carry the mark '
         + '"not run", and a pass does not cover those checks. Run them in an engine that can.') : null,
+    runs.some(r => (r.wheels_without_mobile || []).length)
+      ? banner('Some assets have joints that look like wheels but no SimReady_Metadata.mobile, so their wheeled checks '
+        + 'did not run. They carry the mark "wheels not checked" (docs/wheeled-robots.md).') : null,
     runs.some(r => r.engine === 'newton') ? banner(NEWTON_NOTE, true) : null,
     folder.truncated ? banner('This folder has more JSON files than the page reads. Open a folder further down.') : null,
     h('div', {class: 'toolbar'},

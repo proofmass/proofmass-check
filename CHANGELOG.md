@@ -10,6 +10,11 @@ and the spec version.
 
 ### Added
 
+- A note when an asset's joints look like wheels (no limits, a near horizontal axis, a velocity drive)
+  but its root layer has no `SimReady_Metadata.mobile`: the wheeled checks do not run on it. Five
+  robots that come with Isaac Sim 6.1 (Jetbot, Create 3, TurtleBot3, Jackal, Limo) have none, and passed
+  on LOAD and DROP alone. `results.json` lists the joints in `wheels_without_mobile`, a new optional
+  field, and the GUI and the HTML report put "wheels not checked" next to the verdict.
 - The column of each check in the GUI's matrix, and in the HTML report, says what the check does
   when the pointer rests on it: the check's title from the spec. The wheeled column lists its four.
 

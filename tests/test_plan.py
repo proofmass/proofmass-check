@@ -60,3 +60,16 @@ def test_physx_joint_friction_is_noted_in_the_engines_that_do_not_read_it(cabine
     assert note in make_plan(rubbing, "newton", ALL, Settings()).notes
     assert not any("jointFriction" in n for n in make_plan(rubbing, "physx", ALL, Settings()).notes)
     assert not any("jointFriction" in n for n in make_plan(cabinet, "newton", ALL, Settings()).notes)
+
+
+def test_wheels_without_their_description_are_noted(rover, cabinet):
+    bare = dataclasses.replace(rover, wheeled=None)  # a robot from another maker: wheels, but no mobile description
+    note = (
+        "left_wheel_joint, right_wheel_joint look like wheels (no limits, a horizontal axis, a velocity drive), but "
+        "the asset has no SimReady_Metadata.mobile, so STAND, DRIVE, TURN and STEER do not run (docs/wheeled-robots.md)"
+    )
+    plan = make_plan(bare, "physx", ALL, Settings())
+    assert note in plan.notes and plan.wheels_without_mobile == ("left_wheel_joint", "right_wheel_joint")
+    assert make_plan(rover, "physx", ALL, Settings()).wheels_without_mobile == ()
+    assert not any("look like wheels" in n for n in make_plan(rover, "physx", ALL, Settings()).notes)
+    assert not any("look like wheels" in n for n in make_plan(cabinet, "physx", ALL, Settings()).notes)

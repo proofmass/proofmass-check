@@ -5,7 +5,9 @@ The description is a dictionary in the root layer's `customLayerData`, at
 `SimReady_Metadata` → `mobile`. Proofmass's build writes it. Any other maker can write it too.
 
 Without this dictionary, proofmass-check treats a wheeled robot like any other asset: on the floor,
-with DROP and the drive checks, and without the wheeled checks.
+with DROP and the drive checks, and without the wheeled checks. When its joints look like wheels (no
+limits, a near horizontal axis, a velocity drive), the run says so in a note, so that a pass is not read
+as a pass of the wheeled checks.
 
 ## Conventions
 

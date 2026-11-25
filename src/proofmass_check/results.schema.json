@@ -48,6 +48,11 @@
       "items": {"enum": ["LOAD", "DROP", "HOLD", "TRACK", "LIMIT", "STABLE", "SPEED", "PASSIVE", "GRIP", "SHAKE",
                          "STAND", "DRIVE", "TURN", "STEER"]}
     },
+    "wheels_without_mobile": {
+      "type": "array",
+      "description": "Joints that look like wheels on an asset whose root layer has no SimReady_Metadata.mobile: the wheeled checks did not run on it (docs/spec.md, section 3). Older results do not have it.",
+      "items": {"type": "string"}
+    },
     "checks": {
       "type": "array",
       "items": {

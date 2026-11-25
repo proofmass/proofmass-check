@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Paweł Kikta
 # SPDX-License-Identifier: Apache-2.0
+import dataclasses
 import json
 from importlib import resources
 
@@ -25,7 +26,7 @@ def test_a_full_run_on_the_gripper(gripper, tmp_path):
     data = report.to_dict(run)
     jsonschema.validate(data, SCHEMA)
     assert data["asset"]["name"] == "unit_gripper" and len(data["asset"]["sha256"]) == 64
-    assert data["engine_cannot_run"] == []
+    assert data["engine_cannot_run"] == [] and data["wheels_without_mobile"] == []
     assert data["engine"] == {"name": "fake", "versions": {"fake": "1"}}
     path = report.write(data, tmp_path / "out")
     assert json.loads(path.read_text(encoding="utf-8")) == data
@@ -78,3 +79,10 @@ def test_checks_the_engine_cannot_run_are_in_the_results(gripper):
     assert data["engine_cannot_run"] == ["GRIP", "SHAKE"]
     note = "the fake engine cannot run GRIP, SHAKE on this asset yet, so this result does not cover them"
     assert note in data["notes"]
+
+
+def test_wheels_without_their_description_are_in_the_results(rover):
+    run = run_checks(IdealEngine(), dataclasses.replace(rover, wheeled=None), Settings())
+    data = report.to_dict(run)
+    jsonschema.validate(data, SCHEMA)
+    assert data["wheels_without_mobile"] == ["left_wheel_joint", "right_wheel_joint"]

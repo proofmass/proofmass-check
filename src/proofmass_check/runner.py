@@ -32,6 +32,7 @@ class Run:
     notes: tuple[str, ...]
     seconds: float
     engine_cannot_run: tuple[str, ...] = ()  # checks the asset needs that the engine cannot run yet
+    wheels_without_mobile: tuple[str, ...] = ()  # joints that look like wheels, with no mobile description
 
     @property
     def passed(self) -> bool:
@@ -83,6 +84,7 @@ def run_checks(engine: Engine, asset: Asset, settings: Settings, events: Callabl
         notes=tuple(notes),
         seconds=round(time.monotonic() - start, 1),
         engine_cannot_run=plan.engine_cannot_run,
+        wheels_without_mobile=plan.wheels_without_mobile,
     )
 
 

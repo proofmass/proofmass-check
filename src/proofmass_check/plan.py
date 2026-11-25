@@ -15,6 +15,10 @@ from proofmass_check.checks.passive import passive_joints
 from proofmass_check.model import Asset, GripperSite, Joint
 from proofmass_check.rules import Settings
 
+# A wheel's axis is within about 17 deg of horizontal: the z of its unit vector is below this. Not a rule of
+# the spec: it only decides whether a run notes joints that look like wheels.
+WHEEL_AXIS_TILT = 0.3
+
 
 @dataclass(frozen=True)
 class Plan:
@@ -26,6 +30,7 @@ class Plan:
     site: GripperSite | None  # the gripper site GRIP tests
     notes: tuple[str, ...]
     engine_cannot_run: tuple[str, ...] = ()  # checks the asset needs that the engine cannot run yet
+    wheels_without_mobile: tuple[str, ...] = ()  # joints that look like wheels, on an asset with no mobile description
 
     def runs(self, check_id: str) -> bool:
         return check_id not in self.skip
@@ -67,7 +72,25 @@ def make_plan(
             f"only PhysX reads joint friction (physxJoint:jointFriction), so in the {engine} engine these "
             f"joints move without it: {', '.join(rubbing)}"
         )
-    return Plan(skip, driven, limited, speed_limited, passive, site, tuple(notes), cannot)
+    wheels = [j.name for j in asset.joints if _looks_like_a_wheel(j)] if asset.wheeled is None else []
+    if wheels:  # a robot on wheels without its description would pass on LOAD and DROP alone
+        notes.append(
+            f"{', '.join(wheels)} look like wheels (no limits, a horizontal axis, a velocity drive), but the asset "
+            "has no SimReady_Metadata.mobile, so STAND, DRIVE, TURN and STEER do not run (docs/wheeled-robots.md)"
+        )
+    return Plan(skip, driven, limited, speed_limited, passive, site, tuple(notes), cannot, tuple(wheels))
+
+
+def _looks_like_a_wheel(joint: Joint) -> bool:
+    """A revolute joint without limits, about a near horizontal axis, with a velocity drive: how the wheels of
+    other makers' robots look. It decides nothing but a note."""
+    return (
+        joint.revolute
+        and not joint.limited
+        and joint.drive_kind == "velocity"
+        and joint.direction is not None
+        and abs(joint.direction[2]) < WHEEL_AXIS_TILT
+    )
 
 
 def _drop_skip(asset: Asset, has_drives: bool, settings: Settings) -> dict[str, str]:

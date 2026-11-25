@@ -75,7 +75,10 @@ Missing data is not a failure of a check. A check that needs it reports `N/A`.
 | STEER | a wheeled robot with Ackermann drive | other robots turn instead |
 
 "Fixed to the world" means a fixed joint with one side empty. A wheeled robot is an asset whose
-root layer has `SimReady_Metadata.mobile` ([wheeled-robots.md](wheeled-robots.md)). When LOAD
+root layer has `SimReady_Metadata.mobile` ([wheeled-robots.md](wheeled-robots.md)). An asset without it
+whose joints look like wheels (a revolute joint without limits, about a near horizontal axis, with a velocity
+drive) gets a note that names them, and `wheels_without_mobile` in `results.json` lists them: the wheeled
+checks do not run on it. When LOAD
 finds that the engine did not build every joint, every other check reports `N/A`.
 
 **Wheeled robots.** LOAD, the drive checks and PASSIVE run with the robot's root body held
@@ -252,6 +255,8 @@ Two things about Newton that a reader of its results must know:
 the tool and engine versions, the SHA-256 of the asset's root file, the variants, the settings,
 every verdict with its detail, and notes. `engine_cannot_run` lists the checks the asset needs that
 the engine cannot run yet (section 5). Results of tool 0.3.0 and older do not have it.
+`wheels_without_mobile` lists the joints that look like wheels on an asset with no mobile description
+(section 3). Results of tool 0.3.2 and older do not have it.
 
 **Measurements.** Each check that ran also lists the numbers it compared with its rule, so that a
 program can read them without the detail text. A measurement has a subject (a joint, a gripper

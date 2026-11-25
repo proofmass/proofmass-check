@@ -53,6 +53,7 @@ def to_dict(run: Run) -> dict:
     }
     data["notes"] = list(run.notes)
     data["engine_cannot_run"] = list(run.engine_cannot_run)
+    data["wheels_without_mobile"] = list(run.wheels_without_mobile)
     data["checks"] = [_check(r) for r in run.results]
     data["passed"] = run.passed
     data["seconds"] = run.seconds
