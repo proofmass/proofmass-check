@@ -65,6 +65,7 @@ def test_html_marks_a_pass_that_does_not_cover_every_check():
     page = report.to_html([_run("rover.json", rover), _run("arm.json", results())], made="today")
     assert '<span class="v pass">✓ passed</span> <span class=badge' in page
     assert ">3 not run: STAND, DRIVE, TURN</span>" in page
+    assert '<th class=c title="LOAD: the engine builds the asset as the USD describes it">LOAD</th>' in page
     assert "The newton engine cannot run STAND, DRIVE, TURN on this asset yet" in page
     assert "1 of these runs did not run every check their asset needs" in page
     assert page.count(" not run: ") == 2  # the matrix and the rover's section; the arm has no mark
