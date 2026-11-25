@@ -72,6 +72,15 @@ def test_html_marks_a_pass_that_does_not_cover_every_check():
     assert "did not run every check" not in report.to_html([_run("arm.json", results())], made="today")
 
 
+def test_html_marks_wheels_that_were_not_checked():
+    wheels = ["left_wheel", "right_wheel"]
+    rover = results("rover", verdicts={"LOAD": "PASS", "DROP": "PASS"}, wheels_without_mobile=wheels)
+    page = report.to_html([_run("rover.json", rover), _run("arm.json", results())], made="today")
+    assert '✓ passed</span> <span class=badge title="left_wheel, right_wheel look like wheels' in page
+    assert page.count(">wheels not checked</span>") == 2  # the matrix and the rover's section
+    assert "1 of these assets have joints that look like wheels" in page
+
+
 def test_html_shows_every_verdict_reason_and_note():
     data = results(
         engine="newton",

@@ -113,6 +113,13 @@ def to_html(runs: list[Run], title: str = "proofmass-check results", full_paths:
             f"<p class=callout>{incomplete} of these runs did not run every check their asset needs: their engine "
             "cannot run it yet. They carry the mark &quot;not run&quot;, and a pass does not cover those checks.</p>"
         )
+    undescribed = sum(bool(d.get("wheels_without_mobile")) for d in runs_details)
+    if undescribed:
+        parts.append(
+            f"<p class=callout>{undescribed} of these assets have joints that look like wheels but no "
+            "SimReady_Metadata.mobile, so their wheeled checks did not run. They carry the mark "
+            "&quot;wheels not checked&quot;.</p>"
+        )
     parts += [_run_section(i, d, full_paths) for i, d in enumerate(runs_details)]
     return _PAGE.format(
         title=escape(title),
@@ -132,7 +139,8 @@ def _verdict(verdict: str) -> str:
 def _result(d: dict) -> str:
     """The result of a run: passed, failed with the number of failed checks, or stopped with an error.
 
-    A run whose engine could not run every check its asset needs carries "N not run" next to it.
+    A run whose engine could not run every check its asset needs carries "N not run" next to it, and an asset
+    whose joints look like wheels but that has no mobile description carries "wheels not checked".
     """
     if d["error"]:
         main = '<span class="v err">error</span>'
@@ -140,12 +148,20 @@ def _result(d: dict) -> str:
         main = '<span class="v pass">✓ passed</span>'
     else:
         main = f'<span class="v fail">✕ failed ({d["failed"]})</span>'
+    marks = []
     gaps = d.get("engine_cannot_run", [])
-    if not gaps:
-        return main
-    names = ", ".join(gaps)
-    why = f"The {d['engine']} engine cannot run {names} on this asset yet, so this result does not cover them."
-    return f'{main} <span class=badge title="{escape(why)}">{len(gaps)} not run: {escape(names)}</span>'
+    if gaps:
+        names = ", ".join(gaps)
+        why = f"The {d['engine']} engine cannot run {names} on this asset yet, so this result does not cover them."
+        marks.append(f'<span class=badge title="{escape(why)}">{len(gaps)} not run: {escape(names)}</span>')
+    wheels = d.get("wheels_without_mobile", [])
+    if wheels:
+        why = (
+            f"{', '.join(wheels)} look like wheels, but the asset has no SimReady_Metadata.mobile, so STAND, "
+            "DRIVE, TURN and STEER did not run."
+        )
+        marks.append(f'<span class=badge title="{escape(why)}">wheels not checked</span>')
+    return " ".join([main, *marks])
 
 
 def _matrix(runs_details: list[dict]) -> str:
