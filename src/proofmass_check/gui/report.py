@@ -15,6 +15,7 @@ from datetime import datetime
 from html import escape
 
 from proofmass_check import __version__
+from proofmass_check.checks import TITLES
 from proofmass_check.gui import brand
 from proofmass_check.gui.runs import Run, check_order, details
 
@@ -149,7 +150,7 @@ def _result(d: dict) -> str:
 
 def _matrix(runs_details: list[dict]) -> str:
     ids = check_order(i for d in runs_details for i in d["verdicts"])
-    head = "".join(f"<th class=c>{escape(i)}</th>" for i in ids)
+    head = "".join(f'<th class=c title="{escape(i)}: {escape(TITLES.get(i, ""))}">{escape(i)}</th>' for i in ids)
     rows = []
     for n, d in enumerate(runs_details):
         cells = "".join(

@@ -295,10 +295,14 @@ function folderView(folderId, batch) {
         for (const r of shown) e.target.checked ? selected.add(key(folderId, r.id)) : selected.delete(key(folderId, r.id));
         saveSelection(); draw(); updateSelection();
       }});
+    // A header says what its check does, as the spec's titles say it (/api/state gives them).
+    const what = id => `${id}: ${(state && state.checks && state.checks[id]) || ''}`;
+    const wheeledHelp = `${WHEELED.map(what).join('\n')}\n\nClick to show or hide the four wheeled checks.`;
     const head = h('tr', {}, h('th', {class: 'c'}, all), h('th', {}, 'Asset'), h('th', {}, 'Engine'),
-      cols.map(id => h('th', {class: 'c'}, id === 'WHEELED' || (view.wheeledOpen && WHEELED.includes(id))
-        ? h('button', {onclick: toggleWheeled, title: 'Show or hide STAND, DRIVE, TURN and STEER'}, id)
-        : id)),
+      cols.map(id => h('th', {class: 'c', title: id === 'WHEELED' ? wheeledHelp : what(id)},
+        id === 'WHEELED' || (view.wheeledOpen && WHEELED.includes(id))
+          ? h('button', {onclick: toggleWheeled, title: id === 'WHEELED' ? wheeledHelp : `${what(id)}\n\nClick to fold the wheeled checks.`}, id)
+          : id)),
       h('th', {}, 'Result'),
       measured ? h('th', {class: 'num', title: 'The highest margin of the run: how much of its limit its closest measurement uses'}, 'Margin') : null,
       h('th', {class: 'num'}, 'Time'));

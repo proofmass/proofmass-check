@@ -22,6 +22,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from proofmass_check import __version__, engines
+from proofmass_check.checks import TITLES
 from proofmass_check.gui import batches, brand, inspector, report, runs
 from proofmass_check.gui import settings as gui_settings
 from proofmass_check.rules import SPEC_VERSION
@@ -154,6 +155,7 @@ class App:
         return {
             "version": __version__,
             "spec_version": SPEC_VERSION,
+            "checks": dict(TITLES),  # what each check does, for the column headers
             "folders": [self.folder_json(folder_id) for folder_id in list(self.folders)],
         }
 

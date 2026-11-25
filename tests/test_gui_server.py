@@ -71,6 +71,7 @@ def test_the_api_needs_the_token(gui):
     assert request(port, "GET", "/api/state", token="wrong")[0] == 403
     state = api(port, "GET", "/api/state")
     assert [len(folder["runs"]) for folder in state["folders"]] == [2]
+    assert state["checks"]["DROP"].startswith("dropped from")  # the column headers explain each check
 
 
 def test_another_host_or_site_is_refused(gui):

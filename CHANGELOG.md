@@ -8,6 +8,11 @@ and the spec version.
 
 ## [Unreleased]
 
+### Added
+
+- The column of each check in the GUI's matrix, and in the HTML report, says what the check does
+  when the pointer rests on it: the check's title from the spec. The wheeled column lists its four.
+
 ## [0.3.2] - 2026-11-24
 
 The checks follow docs/spec.md, version 0.3. No rule, number or verdict changed.
