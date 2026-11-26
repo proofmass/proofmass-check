@@ -117,7 +117,8 @@ def evaluate(base: WheeledBase, check_id: str, sent: Commands, path: np.ndarray)
         )
         forward = dx > 0 and abs(dy) <= abs(dx)
         error, allowed = abs(speed - sent.speed), rules.DRIVE_SPEED_TOL * sent.speed
-        drift, most_drift = abs(dy), rules.DRIVE_DRIFT_TOL * abs(dx)
+        # The drift may be as large as the heading turn: one angle, DRIVE_YAW_TOL_DEG, for where it points and goes.
+        drift, most_drift = abs(dy), math.tan(math.radians(rules.DRIVE_YAW_TOL_DEG)) * abs(dx)
         found = [
             _asset("distance along +X", dx, 0.0, "m", forward, "min"),
             _asset("speed error", error, allowed, "m/s", error <= allowed),
