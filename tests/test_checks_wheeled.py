@@ -77,6 +77,18 @@ def test_evaluate_drive(rover):
     assert evaluate(rover.wheeled, "DRIVE", sent, unstable) == (False, "the simulation became unstable (NaN)", [])
 
 
+def test_drive_drift_and_heading_share_one_angle(rover):
+    """A robot that turned 2.6 deg as it started and then drove straight passes: 4.5 % sideways, as TurtleBot3.
+    The old limit of 3 % failed it. Past 3 deg, the drift fails."""
+    sent = Commands({}, seconds=4.0, speed=0.5)
+    for degrees, passes in ((2.6, True), (3.2, False)):
+        angle = math.radians(degrees)
+        aimed = straight(speed=0.5 * math.cos(angle), drift=0.5 * math.sin(angle))
+        aimed[:, 3] = angle  # it points where it goes, from the start: no heading change
+        ok, _, found = evaluate(rover.wheeled, "DRIVE", sent, aimed)
+        assert ok is passes and next(m for m in found if m.quantity == "sideways drift").ok is passes
+
+
 def test_a_robot_that_drives_backward_fails_one_measurement(rover):
     sent = Commands({}, seconds=4.0, speed=0.5)
     ok, _, found = evaluate(rover.wheeled, "DRIVE", sent, straight(speed=-0.5))

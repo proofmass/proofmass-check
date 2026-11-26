@@ -1,6 +1,7 @@
 # proofmass-check specification
 
-Version 0.4 (draft). Version 0.4 puts no floor under an asset fixed to the world (section 1).
+Version 0.4 (draft). Version 0.4 puts no floor under an asset fixed to the world (section 1), and
+gives DRIVE one angle for its heading and its sideways drift (section 4.2).
 Version 0.3 reads the drive of a joint from an `MjcActuator` in Newton (section 2). Version 0.2
 added wheeled robots (section 4.2).
 
@@ -212,8 +213,10 @@ Speeds and rates are measured after a start-up of `STARTUP_S` = 1.5 s, or of
 
 - **Setup:** every driven wheel forward at the test speed, for `DRIVE_SECONDS` = 4.0 s.
 - **Rule:** it moves toward +X; its speed is within `DRIVE_SPEED_TOL` = 0.1 of the command; it
-  drifts sideways less than `DRIVE_DRIFT_TOL` = 0.03 of the distance; its heading changes less than
-  `DRIVE_YAW_TOL_DEG` = 3.0 degrees.
+  drifts sideways less than tan(`DRIVE_YAW_TOL_DEG`) of the distance, and its heading changes less than
+  `DRIVE_YAW_TOL_DEG` = 3.0 degrees. One angle bounds both where the robot points and where it goes. A
+  robot that turns 2.6 deg as it starts and then drives straight drifts 4.5 % of the distance: it
+  passes both. A robot that drives a curve turns more than 3 deg on the way and fails the heading.
 
 #### TURN: it turns in place (differential and skid-steer drive)
 
@@ -293,7 +296,7 @@ site, or empty for the whole asset), a case, a quantity, a value and a limit in 
 | GRIP | site, `out of the fingers` and `along the grip line` | highest load held (kg, `min`): `GRIP_LOAD` times `gripper_maxPayload` |
 | SHAKE | site | slip along the pads: `GRIP_SLIP` |
 | STAND | asset | tilt: `STAND_TILT_DEG`; speed: `STAND_SPEED` |
-| DRIVE | asset | distance along +X (`min`): 0, and the sideways drift no larger; speed error: `DRIVE_SPEED_TOL` of the command; sideways drift: `DRIVE_DRIFT_TOL` of the distance; heading change: `DRIVE_YAW_TOL_DEG` |
+| DRIVE | asset | distance along +X (`min`): 0, and the sideways drift no larger; speed error: `DRIVE_SPEED_TOL` of the command; sideways drift: tan(`DRIVE_YAW_TOL_DEG`) of the distance; heading change: `DRIVE_YAW_TOL_DEG` |
 | TURN | asset | differential: yaw rate error, `TURN_TOL` of the expected rate, and centre drift, `TURN_DRIFT`. Skid steer: yaw rate (`min`), `SKID_TURN_MIN` of the expected rate, and centre drift, one track width |
 | STEER | asset | turning radius error: `TURN_TOL` of the Ackermann radius; yaw rate (`min`): 0 |
 

@@ -28,6 +28,10 @@ and the spec version.
   its file pose can reach through it: a UR5e's wrist is 19 mm above it, 0.8 m out, so its shoulder
   touched the floor 1.6 deg into TRACK and failed by 178.6 deg, and a Fanuc CRX-10iA/L failed by
   31 deg. Without the floor both pass every check. Results of spec 0.3 and 0.4 are not compared.
+- Spec 0.4: DRIVE allows a sideways drift of tan(3 deg), 5.2 % of the distance, the same angle as
+  its heading, and `DRIVE_DRIFT_TOL` (3 %, about 1.7 deg) is gone. A robot that turned 2.6 deg as it
+  started and then drove straight passed the heading and failed the drift: Isaac Sim's TurtleBot3
+  (4.8 %). A robot that drives a curve still fails, on its heading.
 
 ## [0.3.3] - 2026-11-25
 

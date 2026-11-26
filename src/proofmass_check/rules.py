@@ -78,7 +78,6 @@ STAND_TILT_DEG = 2.0  # the most a standing robot may lean
 STAND_SPEED = 0.02  # m/s: slower than this counts as standing still
 DRIVE_SECONDS = 4.0
 DRIVE_SPEED_TOL = 0.1  # the speed may differ from the command by this fraction
-DRIVE_DRIFT_TOL = 0.03  # sideways drift, as a fraction of the distance driven
 DRIVE_YAW_TOL_DEG = 3.0  # the most the heading may change
 TURN_SECONDS = 4.0
 TURN_TOL = 0.15  # TURN: yaw rate, STEER: turning radius, within this fraction of the expected value
