@@ -982,6 +982,16 @@ async function inspectView(spec) {
         h('td', {class: 'num'}, s.payload === null ? 'none' : `${number(s.payload)} kg`))))))] : null,
     d.wheeled ? [h('h2', {}, 'Wheels'), h('p', {}, `${d.wheeled.drive} drive · track ${number(d.wheeled.track * 1000)} mm · `
       + `wheel radius ${number(d.wheeled.radius * 1000)} mm · ${d.wheeled.wheels.map(w => `${w.name} (${w.side}${w.driven ? ', driven' : ''})`).join(', ')}`)] : null,
+    // No description, but joints that look like wheels: what describe-wheels would propose, and how to write it.
+    !d.wheeled && d.derived_mobile ? [h('h2', {}, 'Wheels', h('span', {class: 'muted'}, 'not described in the asset')),
+      banner('The asset has no SimReady_Metadata.mobile, so STAND, DRIVE, TURN and STEER do not run. '
+        + (d.derived_mobile.mobile ? 'proofmass-check proposes the description below from the wheel joints and colliders. '
+          + 'Check it, then write it in a layer next to the asset and run the checks on that layer:' : 'It cannot propose one:'), true),
+      d.derived_mobile.mobile ? [
+        h('p', {}, `${d.derived_mobile.mobile.drive} drive · track ${number(d.derived_mobile.mobile.track * 1000)} mm · wheel radius `
+          + `${number(d.derived_mobile.mobile.radius * 1000)} mm · ${Object.entries(d.derived_mobile.mobile.wheels).map(([n, w]) => `${n} (${w.side}${w.driven ? ', driven' : ''}, spin ${w.spin})`).join(', ')}`),
+        h('div', {class: 'attributes'}, `proofmass-check describe-wheels "${d.file}" --write`)] : null,
+      h('ul', {class: 'notes'}, d.derived_mobile.notes.map(n => h('li', {}, n)))] : null,
     h('h2', {}, 'Attributes of the joint prims', h('span', {class: 'muted'}, 'as written in the file, also the ones the checks do not read')),
     d.joints.map(j => h('details', {},
       h('summary', {}, h('span', {class: 'mono'}, j.name), ` · ${j.prim} · ${j.schemas.join(', ') || 'no applied schemas'}`),

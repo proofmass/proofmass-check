@@ -71,6 +71,21 @@ def _parser() -> argparse.ArgumentParser:
     inspect.add_argument("--out", type=Path, help="write the JSON to this file (default: stdout)")
     inspect.set_defaults(func=_inspect)
 
+    wheels = sub.add_parser(
+        "describe-wheels",
+        help="propose SimReady_Metadata.mobile from a wheeled robot's wheel joints and colliders, as JSON; "
+        "no engine starts",
+    )
+    wheels.add_argument("asset", type=Path, help="the asset's root USD file")
+    wheels.add_argument("--variant", action="append", default=[], metavar="SET=VALUE", help="as for run")
+    wheels.add_argument(
+        "--write",
+        action="store_true",
+        help="write the description in <asset>_mobile.usda next to the asset; it sublayers the asset, whose own "
+        "files do not change. Run the checks on that file.",
+    )
+    wheels.set_defaults(func=_describe_wheels)
+
     listing = sub.add_parser("list-checks", help="list the checks and what each one tests")
     listing.set_defaults(func=_list_checks)
 
@@ -116,6 +131,39 @@ def _inspect(args) -> int:
         args.out.write_text(text + "\n", encoding="utf-8")
     else:
         print(text)
+    return PASSED
+
+
+def _describe_wheels(args) -> int:
+    """The proposed description on stdout, the notes on stderr. Exit 2 when there is none to propose."""
+    if not args.asset.is_file():
+        print(f"proofmass-check: no file {args.asset}", file=sys.stderr)
+        return ERROR
+    try:
+        from proofmass_check import usd_reader, wheels
+    except ImportError as e:
+        print(f"proofmass-check: describe-wheels needs pxr ({e}). Install proofmass-check[usd] in this Python.",
+              file=sys.stderr)  # fmt: skip
+        return ERROR
+    try:
+        asset = usd_reader.read_asset(args.asset, usd_reader.choose_variants(args.asset, (), args.variant))
+    except usd_reader.AssetError as e:
+        print(f"proofmass-check: {e}", file=sys.stderr)
+        return ERROR
+    mobile, notes = wheels.derive(asset)
+    if asset.wheeled is not None:
+        notes.insert(0, "the asset already has SimReady_Metadata.mobile: compare, and keep the maker's")
+    for note in notes:
+        print(f"note: {note}", file=sys.stderr)
+    if mobile is None:
+        return ERROR
+    print(json.dumps(mobile, indent=1))
+    if args.write:
+        if asset.wheeled is not None:
+            print("proofmass-check: not written: the asset already has a description", file=sys.stderr)
+            return ERROR
+        path = wheels.write_layer(args.asset, mobile)
+        print(f"wrote {path}: run the checks on it", file=sys.stderr)
     return PASSED
 
 

@@ -66,7 +66,8 @@ def test_wheels_without_their_description_are_noted(rover, cabinet):
     bare = dataclasses.replace(rover, wheeled=None)  # a robot from another maker: wheels, but no mobile description
     note = (
         "left_wheel_joint, right_wheel_joint look like wheels (no limits, a horizontal axis, a velocity drive), but "
-        "the asset has no SimReady_Metadata.mobile, so STAND, DRIVE, TURN and STEER do not run (docs/wheeled-robots.md)"
+        "the asset has no SimReady_Metadata.mobile, so STAND, DRIVE, TURN and STEER do not run: proofmass-check "
+        "describe-wheels proposes one (docs/wheeled-robots.md)"
     )
     plan = make_plan(bare, "physx", ALL, Settings())
     assert note in plan.notes and plan.wheels_without_mobile == ("left_wheel_joint", "right_wheel_joint")

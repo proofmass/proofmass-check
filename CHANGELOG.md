@@ -8,6 +8,16 @@ and the spec version.
 
 ## [Unreleased]
 
+### Added
+
+- `proofmass-check describe-wheels`: proposes `SimReady_Metadata.mobile` for a differential or
+  skid-steer robot from its wheel joints and colliders, and with `--write` writes it in a layer next
+  to the robot, so the wheeled checks run on a robot from another maker. inspect gives the same
+  proposal in `derived_mobile`, and the GUI's inspector shows it with the command. For five robots
+  that come with Isaac Sim 6.1 (Jetbot, Create 3, TurtleBot3, Jackal, Limo) it proposes the
+  description with which PhysX ran their wheeled checks. It does not propose one for an Ackermann
+  robot, whose steering range must come from its maker.
+
 ## [0.3.3] - 2026-11-25
 
 The checks follow docs/spec.md, version 0.3. No rule or number changed. The reader now reads sphere
