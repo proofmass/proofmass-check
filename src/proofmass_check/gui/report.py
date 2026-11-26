@@ -113,6 +113,12 @@ def to_html(runs: list[Run], title: str = "proofmass-check results", full_paths:
             f"<p class=callout>{incomplete} of these runs did not run every check their asset needs: their engine "
             "cannot run it yet. They carry the mark &quot;not run&quot;, and a pass does not cover those checks.</p>"
         )
+    ungripped = sum(bool(d.get("gripper_without_site")) for d in runs_details)
+    if ungripped:
+        parts.append(
+            f"<p class=callout>{ungripped} of these assets have joints that look like a gripper's fingers but no "
+            "gripper site, so GRIP and SHAKE did not run. They carry the mark &quot;grip not checked&quot;.</p>"
+        )
     undescribed = sum(bool(d.get("wheels_without_mobile")) for d in runs_details)
     if undescribed:
         parts.append(
@@ -161,6 +167,13 @@ def _result(d: dict) -> str:
             "DRIVE, TURN and STEER did not run."
         )
         marks.append(f'<span class=badge title="{escape(why)}">wheels not checked</span>')
+    fingers = d.get("gripper_without_site", [])
+    if fingers:
+        why = (
+            f"{', '.join(fingers)} look like a gripper's fingers, but the asset has no gripper site, so GRIP and "
+            "SHAKE did not run."
+        )
+        marks.append(f'<span class=badge title="{escape(why)}">grip not checked</span>')
     return " ".join([main, *marks])
 
 

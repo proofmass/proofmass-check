@@ -8,15 +8,12 @@ and the spec version.
 
 ## [Unreleased]
 
-### Changed
-
-- Spec 0.4: an asset fixed to the world gets no floor. None of its checks needs one, and an arm in
-  its file pose can reach through it: a UR5e's wrist is 19 mm above it, 0.8 m out, so its shoulder
-  touched the floor 1.6 deg into TRACK and failed by 178.6 deg, and a Fanuc CRX-10iA/L failed by
-  31 deg. Without the floor both pass every check. Results of spec 0.3 and 0.4 are not compared.
-
 ### Added
 
+- "grip not checked": a note, `gripper_without_site` in `results.json` (a new optional field) and a
+  mark next to the verdict in the GUI and the HTML report, when an asset has joints that look like a
+  gripper's fingers but no gripper site, so GRIP and SHAKE do not run. Isaac Sim's Robotiq 2F-85 and
+  Franka Panda have none, and the 2F-85 passed without its grip tested.
 - `proofmass-check describe-wheels`: proposes `SimReady_Metadata.mobile` for a differential or
   skid-steer robot from its wheel joints and colliders, and with `--write` writes it in a layer next
   to the robot, so the wheeled checks run on a robot from another maker. inspect gives the same
@@ -24,6 +21,13 @@ and the spec version.
   that come with Isaac Sim 6.1 (Jetbot, Create 3, TurtleBot3, Jackal, Limo) it proposes the
   description with which PhysX ran their wheeled checks. It does not propose one for an Ackermann
   robot, whose steering range must come from its maker.
+
+### Changed
+
+- Spec 0.4: an asset fixed to the world gets no floor. None of its checks needs one, and an arm in
+  its file pose can reach through it: a UR5e's wrist is 19 mm above it, 0.8 m out, so its shoulder
+  touched the floor 1.6 deg into TRACK and failed by 178.6 deg, and a Fanuc CRX-10iA/L failed by
+  31 deg. Without the floor both pass every check. Results of spec 0.3 and 0.4 are not compared.
 
 ## [0.3.3] - 2026-11-25
 

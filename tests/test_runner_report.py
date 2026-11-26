@@ -27,6 +27,7 @@ def test_a_full_run_on_the_gripper(gripper, tmp_path):
     jsonschema.validate(data, SCHEMA)
     assert data["asset"]["name"] == "unit_gripper" and len(data["asset"]["sha256"]) == 64
     assert data["engine_cannot_run"] == [] and data["wheels_without_mobile"] == []
+    assert data["gripper_without_site"] == []
     assert data["engine"] == {"name": "fake", "versions": {"fake": "1"}}
     path = report.write(data, tmp_path / "out")
     assert json.loads(path.read_text(encoding="utf-8")) == data

@@ -82,7 +82,10 @@ Missing data is not a failure of a check. A check that needs it reports `N/A`.
 root layer has `SimReady_Metadata.mobile` ([wheeled-robots.md](wheeled-robots.md)). An asset without it
 whose joints look like wheels (a revolute joint without limits, about a near horizontal axis, with a velocity
 drive) gets a note that names them, and `wheels_without_mobile` in `results.json` lists them: the wheeled
-checks do not run on it. When LOAD
+checks do not run on it. In the same way, an asset without a gripper site whose joints look like a
+gripper's fingers (a joint that others follow, or driven sliding joints with limits on one body that
+move along one line) gets a note, and `gripper_without_site` lists them: GRIP and SHAKE do not run
+on it. When LOAD
 finds that the engine did not build every joint, every other check reports `N/A`.
 
 **Wheeled robots.** LOAD, the drive checks and PASSIVE run with the robot's root body held
@@ -260,7 +263,9 @@ the tool and engine versions, the SHA-256 of the asset's root file, the variants
 every verdict with its detail, and notes. `engine_cannot_run` lists the checks the asset needs that
 the engine cannot run yet (section 5). Results of tool 0.3.0 and older do not have it.
 `wheels_without_mobile` lists the joints that look like wheels on an asset with no mobile description
-(section 3). Results of tool 0.3.2 and older do not have it.
+(section 3). Results of tool 0.3.2 and older do not have it. `gripper_without_site` lists the joints that
+look like a gripper's fingers on an asset with no gripper site (section 3). Results of tool 0.3.3 and
+older do not have it.
 
 **Measurements.** Each check that ran also lists the numbers it compared with its rule, so that a
 program can read them without the detail text. A measurement has a subject (a joint, a gripper

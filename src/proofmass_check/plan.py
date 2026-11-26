@@ -27,6 +27,7 @@ class Plan:
     site: GripperSite | None  # the gripper site GRIP tests
     notes: tuple[str, ...]
     engine_cannot_run: tuple[str, ...] = ()  # checks the asset needs that the engine cannot run yet
+    gripper_without_site: tuple[str, ...] = ()  # joints that look like fingers, on an asset with no gripper site
     wheels_without_mobile: tuple[str, ...] = ()  # joints that look like wheels, on an asset with no mobile description
 
     def runs(self, check_id: str) -> bool:
@@ -76,7 +77,32 @@ def make_plan(
             "has no SimReady_Metadata.mobile, so STAND, DRIVE, TURN and STEER do not run: proofmass-check "
             "describe-wheels proposes one (docs/wheeled-robots.md)"
         )
-    return Plan(skip, driven, limited, speed_limited, passive, site, tuple(notes), cannot, tuple(wheels))
+    fingers = _fingers(asset) if not asset.sites else []
+    if fingers:  # a gripper without its site would pass with GRIP and SHAKE never run
+        notes.append(
+            f"{', '.join(fingers)} look like a gripper's fingers, but the asset has no gripper site "
+            "(gripper_maxOpening, gripper_maxPayload), so GRIP and SHAKE do not run (docs/spec.md, GRIP)"
+        )
+    return Plan(
+        skip, driven, limited, speed_limited, passive, site, tuple(notes), cannot, tuple(fingers), tuple(wheels)
+    )
+
+
+def _fingers(asset: Asset) -> list[str]:
+    """Joints that look like a gripper's fingers: a joint that others follow (a mimic) and its followers, or
+    driven sliding joints with limits on one body that move along one line, as a pair of fingers. It decides
+    nothing but a note."""
+    names = set()
+    for j in asset.joints:
+        if j.mimic:
+            names |= {j.name, j.mimic.leader}
+    sliders = [j for j in asset.joints if j.kind == "prismatic" and j.limited and j.drive_kind == "position"
+               and j.direction is not None]  # fmt: skip
+    for a in sliders:
+        for b in sliders:
+            if a is not b and a.body0 == b.body0 and abs(float(a.direction @ b.direction)) > 0.9:
+                names |= {a.name, b.name}
+    return [j.name for j in asset.joints if j.name in names]
 
 
 def _looks_like_a_wheel(joint: Joint) -> bool:

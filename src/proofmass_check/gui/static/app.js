@@ -68,6 +68,7 @@ function result(run, big) {
   // A pass does not cover what did not run: say so next to the verdict, not only in the notes.
   const gaps = run.engine_cannot_run || [];
   const wheels = run.wheels_without_mobile || [];
+  const fingers = run.gripper_without_site || [];
   const marks = [
     gaps.length ? h('span', {class: 'badge',
       title: `The ${run.engine} engine cannot run ${gaps.join(', ')} on this asset yet, so this result does not cover them.`},
@@ -76,6 +77,10 @@ function result(run, big) {
       title: `${wheels.join(', ')} look like wheels, but the asset has no SimReady_Metadata.mobile, `
         + 'so STAND, DRIVE, TURN and STEER did not run (docs/wheeled-robots.md).'},
     'wheels not checked') : null,
+    fingers.length ? h('span', {class: 'badge',
+      title: `${fingers.join(', ')} look like a gripper's fingers, but the asset has no gripper site `
+        + '(gripper_maxOpening, gripper_maxPayload), so GRIP and SHAKE did not run.'},
+    'grip not checked') : null,
   ].filter(Boolean);
   if (!marks.length) return main;
   return h('span', {}, main, marks.map(m => [' ', m]));
@@ -367,6 +372,9 @@ function folderView(folderId, batch) {
     runs.some(r => (r.engine_cannot_run || []).length)
       ? banner('Some runs did not run every check their asset needs: their engine cannot run it yet. They carry the mark '
         + '"not run", and a pass does not cover those checks. Run them in an engine that can.') : null,
+    runs.some(r => (r.gripper_without_site || []).length)
+      ? banner('Some assets have joints that look like a gripper's fingers but no gripper site, so GRIP and SHAKE '
+        + 'did not run. They carry the mark "grip not checked".') : null,
     runs.some(r => (r.wheels_without_mobile || []).length)
       ? banner('Some assets have joints that look like wheels but no SimReady_Metadata.mobile, so their wheeled checks '
         + 'did not run. They carry the mark "wheels not checked" (docs/wheeled-robots.md).') : null,

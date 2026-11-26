@@ -48,6 +48,11 @@
       "items": {"enum": ["LOAD", "DROP", "HOLD", "TRACK", "LIMIT", "STABLE", "SPEED", "PASSIVE", "GRIP", "SHAKE",
                          "STAND", "DRIVE", "TURN", "STEER"]}
     },
+    "gripper_without_site": {
+      "type": "array",
+      "description": "Joints that look like a gripper's fingers on an asset with no gripper site: GRIP and SHAKE did not run on it (docs/spec.md, section 3). Older results do not have it.",
+      "items": {"type": "string"}
+    },
     "wheels_without_mobile": {
       "type": "array",
       "description": "Joints that look like wheels on an asset whose root layer has no SimReady_Metadata.mobile: the wheeled checks did not run on it (docs/spec.md, section 3). Older results do not have it.",

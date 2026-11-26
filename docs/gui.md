@@ -283,7 +283,8 @@ the matrix of a folder.
 - **Each row:** the run's verdict, its seconds, and its highest margin. A run with
   `engine_cannot_run` carries "N not run" next to its verdict, and a banner above the matrix says
   that a pass does not cover those checks (spec.md, section 5). A run with `wheels_without_mobile`
-  carries "wheels not checked", with the joints in its tooltip, and a banner says why.
+  carries "wheels not checked", with the joints in its tooltip, and a banner says why. A run with
+  `gripper_without_site` carries "grip not checked" in the same way.
 - **Filters:** only failed runs, one check, text in the asset name.
 - **A cell:** shows the check's detail line on hover. A click on a row opens the asset view.
 - **Live (phase 2):** above the matrix, a table of the batch's assets and runs. A running asset
