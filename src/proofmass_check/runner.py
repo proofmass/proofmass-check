@@ -15,7 +15,7 @@ from proofmass_check.checks.passive import passive
 from proofmass_check.checks.speed import speed
 from proofmass_check.checks.wheeled import wheeled
 from proofmass_check.engines.base import Engine
-from proofmass_check.geometry import floor_height
+from proofmass_check.geometry import run_floor
 from proofmass_check.model import Asset
 from proofmass_check.plan import Plan, make_plan
 from proofmass_check.rules import BASE_LIFT, TRACK_AT, Settings
@@ -51,7 +51,7 @@ def run_checks(engine: Engine, asset: Asset, settings: Settings, events: Callabl
     start = time.monotonic()
     if engine.reads_mjc_actuators:
         asset = asset.with_mjc_drives()
-    floor = floor_height(asset.bodies.values()) if settings.floor else None
+    floor = run_floor(asset, settings)
     engine.open(asset, floor, BASE_LIFT if asset.wheeled else None)
     emit("check", id="LOAD", total=None)
     outcome = engine.load()

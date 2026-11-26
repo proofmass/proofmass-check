@@ -1,7 +1,8 @@
 # proofmass-check specification
 
-Version 0.3 (draft). Version 0.3 reads the drive of a joint from an `MjcActuator` in Newton
-(section 2). Version 0.2 added wheeled robots (section 4.2).
+Version 0.4 (draft). Version 0.4 puts no floor under an asset fixed to the world (section 1).
+Version 0.3 reads the drive of a joint from an `MjcActuator` in Newton (section 2). Version 0.2
+added wheeled robots (section 4.2).
 
 This file says what every check does and which numbers it uses. The code follows this file:
 `src/proofmass_check/rules.py` holds the same numbers, and a unit test fails when the two differ.
@@ -21,7 +22,9 @@ position, else 0. The scene is an infinite floor and the asset. GRIP and SHAKE a
 
 **Floor.** `FLOOR_BELOW` = 0.001 m below the lowest collider in the file pose, and never above
 z = 0. A part that only touches the floor in the file, such as a fingertip, then does not drag on
-it. `--no-floor` removes the floor, for a pinned arm whose links reach below its base.
+it. An asset fixed to the world gets no floor: none of its checks needs one, and an arm in its
+file pose can reach through it, so that a floor would stop the arm, not its drives (a UR5e's wrist
+is 19 mm above it, 0.8 m out). `--no-floor` removes the floor under any asset.
 
 **Seed.** Every random choice uses `numpy.random.default_rng(SEED)`, with `SEED` = 0.
 

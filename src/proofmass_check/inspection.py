@@ -22,7 +22,7 @@ from proofmass_check.checks import TITLES
 from proofmass_check.checks.grip import grip_box
 from proofmass_check.checks.passive import lever, passive_joints
 from proofmass_check.engines.capabilities import CAPABILITIES, supported
-from proofmass_check.geometry import apply, floor_height
+from proofmass_check.geometry import apply, run_floor
 from proofmass_check.model import Asset, Body, Joint
 from proofmass_check.plan import make_plan
 from proofmass_check.rules import GRAVITY, SPEC_VERSION, Settings
@@ -49,7 +49,7 @@ def inspect_asset(file: Path, engine: str, requested: list[str], settings: Setti
         "name": asset.name,
         "variant_sets": usd_reader.variant_sets(file),
         "variants": dict(variants),
-        "floor": _number(floor_height(asset.bodies.values())) if settings.floor else None,
+        "floor": _number(run_floor(asset, settings)),
         "articulated": asset.articulated,
         "root_body": asset.root_body,
         "world_fixed": list(asset.world_fixed),

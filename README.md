@@ -78,7 +78,7 @@ proofmass-check list-checks
 |---|---|
 | `--engine physx` or `newton` | the engine to run on (default `physx`) |
 | `--variant SET=VALUE` | select a variant; repeat for more than one. The engine's own variant set (`PhysX`, `Newton`) is selected when the asset has it |
-| `--no-floor` | no floor, for a pinned arm whose links reach below its base |
+| `--no-floor` | no floor under the asset. An asset fixed to the world never gets one |
 | `--settle S` | seconds a drive gets for a move (spec: 1.5). A run with another value says so in its results |
 | `--out DIR` | where to write `results.json` (default `./proofmass-check-<asset name>`). With several assets, a folder per asset in it |
 | `--events FILE` | write the progress to FILE as JSON Lines, for a program that follows the run |

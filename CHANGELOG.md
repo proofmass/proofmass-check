@@ -8,6 +8,13 @@ and the spec version.
 
 ## [Unreleased]
 
+### Changed
+
+- Spec 0.4: an asset fixed to the world gets no floor. None of its checks needs one, and an arm in
+  its file pose can reach through it: a UR5e's wrist is 19 mm above it, 0.8 m out, so its shoulder
+  touched the floor 1.6 deg into TRACK and failed by 178.6 deg, and a Fanuc CRX-10iA/L failed by
+  31 deg. Without the floor both pass every check. Results of spec 0.3 and 0.4 are not compared.
+
 ### Added
 
 - `proofmass-check describe-wheels`: proposes `SimReady_Metadata.mobile` for a differential or

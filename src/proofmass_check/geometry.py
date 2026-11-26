@@ -51,6 +51,17 @@ def lowest_collider(body: Body, rotation: np.ndarray, position: np.ndarray) -> f
     return min(lows, default=math.inf)
 
 
+def run_floor(asset, settings) -> float | None:
+    """The floor of a run: under an asset that stands free, none under one fixed to the world (spec, section 1).
+
+    A fixed arm needs no floor, and one in its file pose can reach through it: a floor there stops the
+    arm, not its drives.
+    """
+    if not settings.floor or asset.world_fixed:
+        return None
+    return floor_height(asset.bodies.values())
+
+
 def floor_height(bodies) -> float:
     """Where the checks put the floor.
 

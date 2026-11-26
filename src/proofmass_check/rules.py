@@ -11,7 +11,7 @@ Values are in SI units (m, kg, s, N) unless the name says otherwise.
 import math
 from dataclasses import dataclass
 
-SPEC_VERSION = "0.3"
+SPEC_VERSION = "0.4"
 SEED = 0  # every random choice uses numpy.random.default_rng(SEED)
 GRAVITY = 9.81  # m/s2, along -Z
 
@@ -96,7 +96,7 @@ class Settings:
     linear_tol: float = LINEAR_TOL
     angular_tol: float = math.radians(ANGULAR_TOL_DEG)  # rad
     random_poses: int = RANDOM_POSES
-    floor: bool = True  # False for a pinned arm whose links reach below its base
+    floor: bool = True  # False: no floor under any asset; one fixed to the world never gets one
 
     def tolerance(self, revolute: bool) -> float:
         """The tolerance of one joint: rad for a revolute joint, m for a prismatic joint."""
