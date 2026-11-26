@@ -74,3 +74,12 @@ def test_wheels_without_their_description_are_noted(rover, cabinet):
     assert make_plan(rover, "physx", ALL, Settings()).wheels_without_mobile == ()
     assert not any("look like wheels" in n for n in make_plan(rover, "physx", ALL, Settings()).notes)
     assert not any("look like wheels" in n for n in make_plan(cabinet, "physx", ALL, Settings()).notes)
+
+
+def test_fingers_without_a_gripper_site_are_noted(gripper, arm):
+    bare = dataclasses.replace(gripper, sites=())  # a gripper from another maker: fingers, no site
+    plan = make_plan(bare, "physx", ALL, Settings())
+    assert len(plan.gripper_without_site) == 2
+    assert any("look like a gripper's fingers" in n and "GRIP and SHAKE do not run" in n for n in plan.notes)
+    assert make_plan(gripper, "physx", ALL, Settings()).gripper_without_site == ()
+    assert make_plan(arm, "physx", ALL, Settings()).gripper_without_site == ()

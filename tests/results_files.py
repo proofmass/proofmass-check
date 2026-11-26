@@ -19,6 +19,7 @@ def results(
     file=None,
     engine_cannot_run=None,
     wheels_without_mobile=None,
+    gripper_without_site=None,
 ) -> dict:
     """A results file. verdicts: {check ID: verdict}. measurements: {check ID: [measurement, ...]}.
 
@@ -49,6 +50,8 @@ def results(
     }
     if engine_cannot_run is not None:
         data["engine_cannot_run"] = list(engine_cannot_run)
+    if gripper_without_site is not None:
+        data["gripper_without_site"] = list(gripper_without_site)
     if wheels_without_mobile is not None:
         data["wheels_without_mobile"] = list(wheels_without_mobile)
     return data

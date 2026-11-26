@@ -81,6 +81,13 @@ def test_html_marks_wheels_that_were_not_checked():
     assert "1 of these assets have joints that look like wheels" in page
 
 
+def test_html_marks_a_grip_that_was_not_checked():
+    hand = results("hand", verdicts={"LOAD": "PASS", "HOLD": "PASS"}, gripper_without_site=["finger_l", "finger_r"])
+    page = report.to_html([_run("hand.json", hand), _run("arm.json", results())], made="today")
+    assert page.count(">grip not checked</span>") == 2  # the matrix and the hand's section
+    assert "1 of these assets have joints that look like a gripper's fingers" in page
+
+
 def test_html_shows_every_verdict_reason_and_note():
     data = results(
         engine="newton",
