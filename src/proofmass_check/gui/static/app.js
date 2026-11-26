@@ -798,7 +798,7 @@ async function newBatchView() {
     h('h2', {}, 'Settings', h('span', {class: 'muted'}, 'a value that is not the spec\'s is marked in the results')),
     h('div', {class: 'toolbar'}, h('label', {}, 'Name', name)),
     h('div', {class: 'toolbar'}, h('label', {}, 'Settle time, s', settle), h('span', {class: 'muted'}, 'spec: 1.5')),
-    h('div', {class: 'toolbar'}, h('label', {}, floor, 'Floor'), h('span', {class: 'muted'}, 'off for a pinned arm whose links reach below its base')),
+    h('div', {class: 'toolbar'}, h('label', {}, floor, 'Floor'), h('span', {class: 'muted'}, 'off: no floor under any asset. An asset fixed to the world never gets one')),
     h('div', {class: 'toolbar'}, h('label', {}, 'Variants', variants), h('span', {class: 'muted'}, 'SET=VALUE, more than one with spaces')),
     h('h2', {}, 'Commands', h('span', {class: 'muted'}, 'what each run will start')),
     preview,

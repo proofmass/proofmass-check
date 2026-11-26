@@ -5,8 +5,9 @@ import math
 import numpy as np
 import pytest
 
-from proofmass_check.geometry import floor_height, lowest_collider
+from proofmass_check.geometry import floor_height, lowest_collider, run_floor
 from proofmass_check.model import Body, Cylinder, Sphere
+from proofmass_check.rules import Settings
 
 
 def test_lowest_collider_of_the_arm(arm):
@@ -16,6 +17,12 @@ def test_lowest_collider_of_the_arm(arm):
     assert lowest_collider(bar, down, np.array([0, 0, 0.25])) == pytest.approx(-0.15)
     # 1 mm below the base. The scale in the file is single precision, so compare to 1e-6 m.
     assert floor_height(arm.bodies.values()) == pytest.approx(-0.001, abs=1e-6)
+
+
+def test_no_floor_under_an_asset_fixed_to_the_world(arm, prop):
+    assert arm.world_fixed and run_floor(arm, Settings()) is None  # spec 0.4: a fixed arm reaches through a floor
+    assert run_floor(prop, Settings()) == pytest.approx(floor_height(prop.bodies.values()))
+    assert run_floor(prop, Settings(floor=False)) is None
 
 
 def test_lowest_collider_of_a_wheel():

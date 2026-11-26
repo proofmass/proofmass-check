@@ -46,7 +46,7 @@ def _parser() -> argparse.ArgumentParser:
         help="select a variant, for example Physics=PhysX (repeat for more than one)",
     )
     run.add_argument(
-        "--no-floor", action="store_true", help="no floor: for a pinned arm whose links reach below its base"
+        "--no-floor", action="store_true", help="no floor under the asset; an asset fixed to the world never gets one"
     )
     run.add_argument(
         "--settle", type=float, default=SETTLE_S, help=f"seconds a drive gets for a move (spec: {SETTLE_S})"
