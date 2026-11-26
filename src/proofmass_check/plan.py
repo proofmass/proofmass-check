@@ -14,10 +14,7 @@ from proofmass_check.checks.grip import choose_site
 from proofmass_check.checks.passive import passive_joints
 from proofmass_check.model import Asset, GripperSite, Joint
 from proofmass_check.rules import Settings
-
-# A wheel's axis is within about 17 deg of horizontal: the z of its unit vector is below this. Not a rule of
-# the spec: it only decides whether a run notes joints that look like wheels.
-WHEEL_AXIS_TILT = 0.3
+from proofmass_check.wheels import is_wheel_joint
 
 
 @dataclass(frozen=True)
@@ -76,21 +73,16 @@ def make_plan(
     if wheels:  # a robot on wheels without its description would pass on LOAD and DROP alone
         notes.append(
             f"{', '.join(wheels)} look like wheels (no limits, a horizontal axis, a velocity drive), but the asset "
-            "has no SimReady_Metadata.mobile, so STAND, DRIVE, TURN and STEER do not run (docs/wheeled-robots.md)"
+            "has no SimReady_Metadata.mobile, so STAND, DRIVE, TURN and STEER do not run: proofmass-check "
+            "describe-wheels proposes one (docs/wheeled-robots.md)"
         )
     return Plan(skip, driven, limited, speed_limited, passive, site, tuple(notes), cannot, tuple(wheels))
 
 
 def _looks_like_a_wheel(joint: Joint) -> bool:
-    """A revolute joint without limits, about a near horizontal axis, with a velocity drive: how the wheels of
-    other makers' robots look. It decides nothing but a note."""
-    return (
-        joint.revolute
-        and not joint.limited
-        and joint.drive_kind == "velocity"
-        and joint.direction is not None
-        and abs(joint.direction[2]) < WHEEL_AXIS_TILT
-    )
+    """A wheel joint with a velocity drive: how the wheels of other makers' robots look. It decides nothing but a
+    note."""
+    return is_wheel_joint(joint) and joint.drive_kind == "velocity"
 
 
 def _drop_skip(asset: Asset, has_drives: bool, settings: Settings) -> dict[str, str]:

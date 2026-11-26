@@ -101,6 +101,14 @@ It prints JSON: the plan with the reason for each `N/A`, the joints with their d
 they carry, and the attributes written on each joint prim. It needs pxr, so run it in a Python
 with `proofmass-check[usd]`, not in Isaac Sim's.
 
+A wheeled robot needs a description of its wheels for STAND, DRIVE, TURN and STEER. For a robot
+from another maker, which has none, this proposes one and writes it in a layer next to the robot
+([wheeled-robots.md](docs/wheeled-robots.md)):
+
+```bash
+proofmass-check describe-wheels path/to/robot.usd --write
+```
+
 ## See the results
 
 ```bash

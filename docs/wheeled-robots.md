@@ -9,6 +9,25 @@ with DROP and the drive checks, and without the wheeled checks. When its joints 
 limits, a near horizontal axis, a velocity drive), the run says so in a note, so that a pass is not read
 as a pass of the wheeled checks.
 
+## A robot from another maker
+
+`proofmass-check describe-wheels robot.usd` proposes the description from the USD, as JSON, and
+`--write` writes it in `robot_mobile.usda` next to the robot. That layer sublayers the robot, whose
+own files do not change: run the checks on it. The GUI's inspector shows the same proposal.
+
+- A wheel is a revolute joint without limits, about an axis within about 17 deg of horizontal. It
+  is driven when it has a velocity drive. Its radius and centre come from a cylinder about its
+  joint axis that holds the colliders of the body it moves.
+- The side is the sign of the wheel's y. The spin is +1 when the joint axis points left (+Y): a
+  positive speed then rolls the wheel toward +X.
+- Two driven wheels make a differential robot, more make a skid-steer one. The radius, track and
+  axle centre come from the driven wheels.
+- It is a proposal. Check that a positive speed of each wheel with spin +1 rolls the robot forward,
+  and that the front faces +X: a wheel whose joint axis is the wrong way round gets spin -1 and
+  looks right. A note says when the wheels do not stand on z = 0.
+- An Ackermann robot is not proposed: its steering range and the sign of each steering joint must
+  come from its maker.
+
 ## Conventions
 
 - The robot's front faces +X, left is +Y, up is +Z (ROS REP-103, as Isaac Sim's robots).

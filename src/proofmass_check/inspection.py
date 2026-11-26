@@ -26,6 +26,7 @@ from proofmass_check.geometry import apply, floor_height
 from proofmass_check.model import Asset, Body, Joint
 from proofmass_check.plan import make_plan
 from proofmass_check.rules import GRAVITY, SPEC_VERSION, Settings
+from proofmass_check.wheels import derive
 
 CYLINDER_SIDES = 16  # a 3D view draws a cylinder collider as a prism with this many sides
 
@@ -58,7 +59,14 @@ def inspect_asset(file: Path, engine: str, requested: list[str], settings: Setti
         "joints": [_joint(asset, j, prims.get(j.prim, {}), pushed) for j in asset.joints],
         "sites": [_site(s) for s in asset.sites],
         "wheeled": _wheeled(asset),
+        "derived_mobile": _derived(asset) if plan.wheels_without_mobile else None,
     }
+
+
+def _derived(asset: Asset) -> dict:
+    """A proposed SimReady_Metadata.mobile for a robot whose joints look like wheels, and why (wheels.py)."""
+    mobile, notes = derive(asset)
+    return {"mobile": mobile, "notes": notes}
 
 
 def _number(value) -> float | None:
