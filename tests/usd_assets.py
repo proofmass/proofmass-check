@@ -98,6 +98,19 @@ def arm(path: Path) -> Path:
     return path
 
 
+def loose_arm(path: Path) -> Path:
+    """The arm, with its base on a D6 joint to the world that leaves every axis free, as Isaac Sim writes the
+    root of an articulation (Franka Panda)."""
+    arm(path)
+    stage = Usd.Stage.Open(str(path))
+    stage.RemovePrim("/unit_arm/root_joint")
+    root = UsdPhysics.Joint.Define(stage, "/unit_arm/rootJoint")
+    root.CreateBody0Rel().SetTargets(["/unit_arm/base"])
+    root.GetPrim().CreateAttribute("articulationType", Sdf.ValueTypeNames.Token).Set("articulatedRoot")
+    stage.Save()
+    return path
+
+
 def actuator(stage, path, target, gain, bias, force=None, bias_type="affine") -> Usd.Prim:
     """An MjcActuator on a joint: force = gain x control + bias[0] + bias[1] x position + bias[2] x speed."""
     prim = stage.DefinePrim(path, "MjcActuator")

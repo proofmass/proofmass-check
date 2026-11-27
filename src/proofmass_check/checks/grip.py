@@ -32,9 +32,9 @@ def choose_site(asset: Asset) -> tuple[GripperSite | None, list[str]]:
     """The site GRIP tests, and a note for each site it does not test.
 
     GRIP tests the first site that has gripper_maxPayload, sits on a rigid body, and belongs to a
-    gripper fixed to the world (a free gripper would fall).
+    gripper fixed to the world, or held by the checks (a free gripper would fall).
     """
-    fixed = bool(asset.world_fixed)
+    fixed = bool(asset.world_fixed) or asset.held
     found, notes = None, []
     for site in asset.sites:
         why = (

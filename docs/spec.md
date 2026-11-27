@@ -1,7 +1,9 @@
 # proofmass-check specification
 
-Version 0.4 (draft). Version 0.4 puts no floor under an asset fixed to the world (section 1), and
-gives DRIVE one angle for its heading and its sideways drift (section 4.2).
+Version 0.5 (draft). Version 0.5 holds the base of an asset with position drives that is not fixed
+to the world (section 3), and leaves out a D6 joint to the world with every axis free (section 2).
+Version 0.4 puts no floor under an asset fixed to the world (section 1), and gives DRIVE one angle
+for its heading and its sideways drift (section 4.2).
 Version 0.3 reads the drive of a joint from an `MjcActuator` in Newton (section 2). Version 0.2
 added wheeled robots (section 4.2).
 
@@ -25,7 +27,8 @@ position, else 0. The scene is an infinite floor and the asset. GRIP and SHAKE a
 z = 0. A part that only touches the floor in the file, such as a fingertip, then does not drag on
 it. An asset fixed to the world gets no floor: none of its checks needs one, and an arm in its
 file pose can reach through it, so that a floor would stop the arm, not its drives (a UR5e's wrist
-is 19 mm above it, 0.8 m out). `--no-floor` removes the floor under any asset.
+is 19 mm above it, 0.8 m out). An asset whose base the checks hold (section 3) gets none either.
+`--no-floor` removes the floor under any asset.
 
 **Seed.** Every random choice uses `numpy.random.default_rng(SEED)`, with `SEED` = 0.
 
@@ -53,7 +56,11 @@ The reader never repairs the asset. It reads the USD as an engine would:
   the engine.
 - A joint that targets a prim inside a body means that body.
 - A generic (D6) joint becomes one joint per free axis, as in PhysX. An axis whose low limit is
-  above its high limit is locked.
+  above its high limit is locked. A D6 joint between a body and the world with all six axes free,
+  no limit and no drive is left out, and the engines switch it off. Isaac Sim writes one at the root
+  of an articulation (Franka Panda's `rootJoint`). PhysX keeps the base in place with it, and Newton
+  does not build it, so the asset failed LOAD in Newton. Without it the asset is held (section 3),
+  as PhysX held it.
 - A mimic joint (PhysX, MuJoCo or Newton schema) follows its leader. PASSIVE does not push it.
 - A joint's drive is its PhysicsDriveAPI. In Newton, a joint without one, and with one axis, gets
   its drive from an active `MjcActuator` that targets it, as Newton's importer does. The actuator
@@ -74,7 +81,7 @@ Missing data is not a failure of a check. A check that needs it reports `N/A`.
 | TRACK, LIMIT, STABLE | a joint with a position drive has both limits | no driven joint has limits |
 | SPEED | a driven joint with limits also has a speed limit | no driven joint has a speed limit |
 | PASSIVE | a joint without a position drive has both limits, and follows no other joint | no such joint |
-| GRIP, SHAKE | a gripper site has `gripper_maxPayload`, sits on a body, and the gripper is fixed to the world | the reason for each site |
+| GRIP, SHAKE | a gripper site has `gripper_maxPayload`, sits on a body, and the gripper is fixed to the world or held | the reason for each site |
 | STAND, DRIVE | the asset is a wheeled robot and the run has a floor | not a wheeled robot |
 | TURN | a wheeled robot with differential or skid-steer drive | an Ackermann robot steers instead |
 | STEER | a wheeled robot with Ackermann drive | other robots turn instead |
@@ -88,6 +95,12 @@ gripper's fingers (a joint that others follow, or driven sliding joints with lim
 move along one line) gets a note, and `gripper_without_site` lists them: GRIP and SHAKE do not run
 on it. When LOAD
 finds that the engine did not build every joint, every other check reports `N/A`.
+
+**A base that is not fixed.** An asset with a position drive that is not fixed to the world and is
+not a wheeled robot is held: every check runs with its root body fixed where the file puts it, as a
+scene fixes an arm, and with no floor (section 1). The checks then test its drives, not how it
+stands. A note says so. Isaac Sim's Franka Panda is such an asset once its root joint is left out
+(section 2): held, it gives in PhysX the same results as with that joint.
 
 **Wheeled robots.** LOAD, the drive checks and PASSIVE run with the robot's root body held
 `BASE_LIFT` = 0.05 m above its file pose, so the wheels do not touch the floor. A joint with a

@@ -133,8 +133,10 @@ class Engine(Protocol):
     def open(self, asset: Asset, floor: float | None, hold_base: float | None = None) -> None:
         """Load the asset with its variants. floor is the floor height in m, or None for no floor.
 
-        hold_base, for a wheeled robot: load, settle, move, push and the grip scene hold the root body
-        fixed this far (m) above its file pose, so the wheels do not touch the floor. drive does not.
+        hold_base: load, settle, move, push and the grip scene hold the root body fixed this far (m)
+        above its file pose. A wheeled robot is held BASE_LIFT up, so the wheels do not touch the floor,
+        and drive does not hold it. A held asset (Asset.held) is held at 0. None: nothing is held.
+        Joints in asset.free_roots are switched off on the engine's stage.
         """
         ...
 

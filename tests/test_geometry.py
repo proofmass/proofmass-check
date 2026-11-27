@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from proofmass_check.geometry import floor_height, lowest_collider, run_floor
+from proofmass_check.geometry import floor_height, lowest_collider, matrix_to_quat, quat_to_matrix, run_floor
 from proofmass_check.model import Body, Cylinder, Sphere
 from proofmass_check.rules import Settings
 
@@ -23,6 +23,18 @@ def test_no_floor_under_an_asset_fixed_to_the_world(arm, prop):
     assert arm.world_fixed and run_floor(arm, Settings()) is None  # spec 0.4: a fixed arm reaches through a floor
     assert run_floor(prop, Settings()) == pytest.approx(floor_height(prop.bodies.values()))
     assert run_floor(prop, Settings(floor=False)) is None
+
+
+def test_no_floor_under_an_asset_the_checks_hold(loose_arm):
+    assert loose_arm.held and run_floor(loose_arm, Settings()) is None  # spec 0.5: held as a fixed arm
+
+
+def test_matrix_to_quat_undoes_quat_to_matrix():
+    rng = np.random.default_rng(0)
+    quats = rng.normal(size=(200, 4))
+    for q in [*quats / np.linalg.norm(quats, axis=1)[:, None], (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1)]:
+        r = quat_to_matrix(q)
+        assert quat_to_matrix(matrix_to_quat(r)) == pytest.approx(r, abs=1e-12)
 
 
 def test_lowest_collider_of_a_wheel():

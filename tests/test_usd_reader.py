@@ -187,6 +187,21 @@ def test_d6_joint_axes(tmp_path):
     assert asset.joint("handle_temp_joint").drive is None
 
 
+def test_a_d6_joint_to_the_world_with_every_axis_free_is_left_out(loose_arm, tmp_path):
+    """Isaac Sim's articulation root (Franka Panda): PhysX keeps the base in place with it, Newton does not build it.
+    With one axis limited, it is read as a joint."""
+    assert [j.name for j in loose_arm.joints] == ["arm_joint"] and loose_arm.free_roots == ("/unit_arm/rootJoint",)
+    assert not loose_arm.world_fixed and loose_arm.held and loose_arm.root_body == "/unit_arm/base"
+    path = usd_assets.loose_arm(tmp_path / "limited.usda")
+    stage = Usd.Stage.Open(str(path))
+    limit = UsdPhysics.LimitAPI.Apply(stage.GetPrimAtPath("/unit_arm/rootJoint"), "transZ")
+    limit.CreateLowAttr(1.0)
+    limit.CreateHighAttr(-1.0)  # locked
+    stage.Save()
+    limited = read_asset(path)
+    assert limited.free_roots == () and len([j for j in limited.joints if j.d6 == "rootJoint"]) == 5
+
+
 def test_files_that_are_not_assets(tmp_path):
     empty = Usd.Stage.CreateNew(str(tmp_path / "empty.usda"))
     empty.Save()

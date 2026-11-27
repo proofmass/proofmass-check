@@ -55,6 +55,14 @@ def test_an_arm_follows_its_drive(engine, arm):
     expect(results, "SPEED", "PASS" if "SPEED" in engine.supported else "N/A")
 
 
+def test_an_arm_on_a_free_root_joint_is_held(engine, loose_arm):
+    """Spec 0.5: the D6 joint with every axis free is switched off, and the checks hold the base."""
+    results = verdicts(engine, loose_arm)
+    for check_id in ("LOAD", "HOLD", "TRACK", "LIMIT", "STABLE"):
+        expect(results, check_id)
+    expect(results, "DROP", "N/A")
+
+
 def test_only_newton_drives_a_joint_from_its_mjc_actuator(engine, actuated_arm):
     results = verdicts(engine, actuated_arm)
     expect(results, "LOAD")

@@ -9,7 +9,9 @@ The reader must work on packages from any maker. So:
 - A joint that targets a prim inside a body, such as a mesh, means that body.
 - Polygons are split into triangles. A box collider (UsdGeom.Cube) becomes its 8 corners.
 - A mass the USD leaves to the engine reads as None.
-- A generic (D6) joint becomes one Joint per free axis, as in PhysX.
+- A generic (D6) joint becomes one Joint per free axis, as in PhysX. One to the world with every axis
+  free (Isaac Sim's articulation root) is left out, and its path kept in Asset.free_roots: the checks
+  hold the base instead, as PhysX does with it.
 - The drive an MjcActuator gives a joint is kept apart from its PhysicsDriveAPI: only Newton reads it.
 
 Import this module only after the engine has started. In Isaac Sim, pxr cannot be imported before.
@@ -99,10 +101,13 @@ def read_asset(file: str | Path, variants: Mapping[str, str] | None = None) -> A
     if not bodies:
         raise AssetError(f"{Path(file).name} has no rigid body (PhysicsRigidBodyAPI) with these variants: {variants}")
     actuators = _read_actuators(prims)
-    joints = []
+    joints, free_roots = [], []
     for prim in prims:
         if prim.IsA(UsdPhysics.Joint):
-            joints += _read_joint(prim, stage, cache, bodies, actuators.get(prim.GetPath()))
+            if _holds_nothing(prim, stage, cache, bodies):
+                free_roots.append(str(prim.GetPath()))
+            else:
+                joints += _read_joint(prim, stage, cache, bodies, actuators.get(prim.GetPath()))
     return Asset(
         file=str(file),
         name=default_prim.GetName(),
@@ -112,6 +117,7 @@ def read_asset(file: str | Path, variants: Mapping[str, str] | None = None) -> A
         sites=tuple(_read_site(prim, cache) for prim in prims if _has_value(prim, usd_names.GRIPPER_MAX_OPENING)),
         articulated=any(prim.HasAPI(UsdPhysics.ArticulationRootAPI) for prim in prims),
         wheeled=_read_wheeled(stage.GetRootLayer()),
+        free_roots=tuple(free_roots),
     )
 
 
@@ -360,6 +366,28 @@ def _read_joint(prim: Usd.Prim, stage: Usd.Stage, cache: UsdGeom.XformCache, bod
     # body1 is the world.
     frame = side1 if side1.body else side0
     return [_dof_joint(prim, dof, frame, common, actuator if len(dofs) == 1 else None) for dof in dofs]
+
+
+def _holds_nothing(prim: Usd.Prim, stage: Usd.Stage, cache: UsdGeom.XformCache, bodies) -> bool:
+    """A D6 joint between a body and the world with all six axes free, no limit and no drive.
+
+    Isaac Sim writes one at the root of an articulation (its articulationType is articulatedRoot).
+    PhysX keeps the base in place with it: Franka Panda gives the same results with it as held. Newton
+    does not build it.
+    """
+    if prim.GetTypeName() != "PhysicsJoint" or UsdPhysics.Joint(prim).GetJointEnabledAttr().Get() is False:
+        return False
+    api = UsdPhysics.Joint(prim)
+    sides = [_side(stage, cache, bodies, rel, api.GetLocalPos0Attr(), api.GetLocalRot0Attr()).body
+             for rel in (api.GetBody0Rel(), api.GetBody1Rel())]  # fmt: skip
+    if (sides[0] is None) == (sides[1] is None):
+        return False
+    dofs = _d6_dofs(prim)
+    return (
+        len(dofs) == len(D6_AXES)
+        and all(d.lower is None and d.upper is None for d in dofs)
+        and not any(prim.HasAPI(UsdPhysics.DriveAPI, axis) for axis in D6_AXES)
+    )
 
 
 def _side(stage, cache, bodies, rel, pos_attr, rot_attr) -> _Side:
