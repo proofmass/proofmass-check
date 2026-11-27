@@ -24,6 +24,17 @@ and the spec version.
 
 - PhysX held a wheeled robot's base turned to the world's axes. It now holds it as the file turns it.
 
+## [0.4.1] - 2026-11-26
+
+The checks follow docs/spec.md, version 0.4. No rule or number changed.
+
+### Fixed
+
+- The GUI did not load in 0.4.0: it stayed at "Loading…". The banner for "grip not checked" put an
+  apostrophe inside a string in single quotes, so the browser could not read app.js at all. A test
+  now parses every script of the GUI with Node.js, where Node.js is installed (it is on GitHub's
+  runners).
+
 ## [0.4.0] - 2026-11-26
 
 The checks follow docs/spec.md, version 0.4. Two rules changed, both from a run of the robots that
@@ -256,7 +267,8 @@ The first release. The checks follow docs/spec.md, version 0.2.
 - The `proofmass-check` command: `run` and `list-checks`.
 - Engines: PhysX in Isaac Sim 6.1, and Newton as an experiment.
 
-[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/proofmass/proofmass-check/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/proofmass/proofmass-check/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/proofmass/proofmass-check/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/proofmass/proofmass-check/compare/v0.3.1...v0.3.2

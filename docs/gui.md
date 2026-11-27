@@ -1,9 +1,9 @@
 # proofmass-check GUI: design
 
-Version 0.4 (draft). Phases 1 to 3, the viewer, the runner and the inspector, are built in 0.3.0
-(section 8). Experiments are not. This file says what the GUI does, how it is built, and what must change in
-proofmass-check before it. [spec.md](spec.md) stays the authority for the checks: the GUI shows
-what the checks decide, and never decides itself.
+Version 0.5 (draft). Phases 1 to 3, the viewer, the runner and the inspector, are built in 0.3.0
+(section 8). The replay (phase 4) and experiments are not. This file says what the GUI does, how
+it is built, and what must change in proofmass-check before it. [spec.md](spec.md) stays the
+authority for the checks: the GUI shows what the checks decide, and never decides itself.
 
 ## 1. Goal
 
@@ -17,6 +17,14 @@ The GUI makes three tasks fast that are slow today:
 These tasks come from the audits of Lightwheel's appliances (10 assets) and AgiBot's G2 (46
 joints) in November 2026. In both, the results were read from `results.json` by hand, and scripts
 outside this repository listed the joints, drives and friction and made the report.
+
+A fourth task came after them:
+
+4. See what a check did to the asset: how a joint moved, where the box slipped, which pose blew
+   up. In the run of Isaac Sim's robots for spec 0.4, a UR5e failed TRACK by 178.6 deg: its
+   wrist starts 19 mm above the floor, and the arm touched the floor 1.6 deg into the move of its
+   shoulder. The results say only how far the joint is from its target. A replay of the move
+   shows the cause (sections 5.5 and 6.11).
 
 **What the GUI never does:**
 
@@ -37,6 +45,9 @@ outside this repository listed the joints, drives and friction and made the repo
 | worker | a process that runs proofmass-check in an engine's Python |
 | measurement | one number that a check compared with its rule, with the rule's limit (section 5.1) |
 | margin | how much of its limit a measurement uses: value / limit, or limit / value for a lower bound. Above 1, the measurement fails its rule. |
+| replay | the motion of every body during a run, recorded with `run --replay` in one file next to `results.json` (section 5.5) |
+| clip | the part of a replay that one engine operation gives: one settle, move, push, drop, drive or grip trial |
+| frame | the pose of every body at one time of a clip |
 
 ## 3. Users
 
@@ -70,9 +81,9 @@ browser --HTTP, 127.0.0.1--> proofmass-check gui            any Python 3.11+ wit
 - Engines run only in workers. The server never imports pxr, isaacsim or newton, because each
   engine needs its own Python (README, "Engines"), and in Isaac Sim pxr exists only after Isaac
   Sim has started.
-- A worker gives its results to the server only through files: `results.json`, `events.jsonl` and
-  its log. So the command line stays the one interface, and a run from the GUI writes the same
-  `results.json` as the same command in a terminal.
+- A worker gives its results to the server only through files: `results.json`, `events.jsonl`, its
+  log, and the replay when the batch records one. So the command line stays the one interface,
+  and a run from the GUI writes the same `results.json` as the same command in a terminal.
 
 ### 4.1 Pythons
 
@@ -109,6 +120,7 @@ The server starts processes, so a web page open in the same browser must not rea
     physx/events-1.jsonl                  the progress of the run's first worker (section 5.2)
     physx/log-1.txt                       that worker's stdout and stderr
     physx/Dishwasher036/results.json      as the command line writes it
+    physx/Dishwasher036/replay.bin        the motion of each check, when the batch records it (5.5)
     newton/..., newton-2/...              a run for each engine, and for each repeat in Newton
 ```
 
@@ -247,6 +259,134 @@ starts once. `Engine.open()` loads each asset into the same engine.
 - When a worker stops in the middle of an asset, as an engine that crashes does, the GUI marks
   that asset as stopped and starts a new worker with the assets that are left.
 
+### 5.5 The replay
+
+Not built (phase 4). `results.json` holds the numbers that a check compared with its rule, but
+not the motion that gave them. The engines compute the pose of every body at every step, and
+nothing keeps it. The option `--replay` writes that motion to `replay.bin`, next to `results.json`:
+
+```bash
+proofmass-check run path/to/asset.usd --engine physx --replay
+```
+
+With several assets, each asset's folder gets its own `replay.bin`, as it gets its own
+`results.json` (section 5.4).
+
+**What is recorded:**
+
+- Each engine operation gives one clip: a settle, a move, a push, a drop, a drive, or one trial of
+  the grip scene. LOAD gives none, because it only builds the asset.
+- A frame holds its time from the start of the clip, then the position and rotation of each body
+  of `asset.bodies`, in the world. A clip of the grip scene also holds the grip box, after the
+  bodies.
+- The first frame is the state at the start of the operation: after the reset, and after the
+  lift of DROP or of a wheeled check. Then a frame comes each 1/30 s of simulated time, to the
+  nearest step: every 8th step of PhysX's 1/240 s, and every 2nd step of SPEED's 1/60 s. Newton
+  records at the end of each CUDA graph. When it records, a graph has 16 steps of 0.002 s, so
+  Newton gives 31 frames per second. The last frame is always the state at the end of the
+  operation, which the check measured.
+- The file holds body poses, not joint positions. A joint that comes apart, or a body that flies
+  off in STABLE, shows as it happened. Joint positions would hide both.
+- A value that is not finite stays NaN in the file.
+
+**Each clip has a label**, so the GUI can play the clip of a measurement (section 6.11):
+
+| Field | Meaning |
+|---|---|
+| `check` | the check ID. The shaken trial of the grip scene has `SHAKE`. |
+| `subject`, `case` | those of the measurement the clip gives (section 5.1). Empty for a clip of the whole asset: HOLD, DROP, STABLE and the wheeled checks. |
+| `attempt` | which clip of several for one measurement: `pose 17` in STABLE, `push 74 N m` in PASSIVE, `1.7 kg` in GRIP. Empty when there is one. |
+| `ok` | what the check decided from this clip: the joint reached its target, the pose was stable, the box held |
+| `operation` | `settle`, `move`, `push`, `drop`, `drive` or `trial` |
+| `arguments` | the operation's arguments: the targets, the pushed joint and its effort, the load and its direction |
+
+- The runner gives the check ID, as it does for the `step` events (section 5.2). The grip check
+  gives `SHAKE` for its shaken trial. The check gives the rest: it wraps each engine call in
+  `replay.label(subject, case, attempt)`, and sets the label's `ok` when it has decided. Without
+  `--replay`, the label does nothing. A check decides nothing differently because of it.
+- The engine gets a recorder from the runner, or none when the run does not record. Each engine
+  calls it from the one place where it steps: PhysX gets one step method that every loop calls,
+  and Newton records in `_Sim.run` and in the shaken pull. The runner's wrapper that counts
+  operations for the `step` events also starts and ends a clip around each operation.
+
+**The file** is binary, because a JSON file of the same frames would be several times larger and
+slow to read. Also, the GUI reads every JSON file in an opened folder to find results files
+(section 4.3), so a large JSON file there would slow every scan.
+
+```
+replay.bin
+  8 bytes   "PMREPLAY"
+  4 bytes   the format version, 1, as a little-endian uint32
+  4 bytes   n, the length of the header in bytes, as a little-endian uint32
+  n bytes   the header: JSON in UTF-8, padded with spaces to a multiple of 4 bytes
+  the rest  the frames, as little-endian float32
+```
+
+```json
+{
+  "id": "4f1c09d2a7e85b3c6d10e2f4a9b87c55",
+  "engine": "physx",
+  "sha256": "<the SHA-256 of the root file, as in results.json>",
+  "bodies": ["/ur5e/base_link", "/ur5e/shoulder_link", "..."],
+  "clips": [
+    {"check": "TRACK", "subject": "shoulder_lift_joint", "case": "25%", "attempt": "", "ok": false,
+     "operation": "settle",
+     "arguments": {"targets": {"shoulder_lift_joint": -3.1416, "...": 0.0}, "seconds": 1.5},
+     "box": null, "offset": 0, "frames": 46}
+  ]
+}
+```
+
+- A frame is `t`, then `x y z qw qx qy qz` for each body, and for the box when the clip has one.
+  The quaternion is in the order of `geometry.quat_to_matrix`.
+- `offset` counts float32 values from the start of the frames, and `frames` is the number of
+  frames in the clip. `box` is the size of the grip box in m, along its three axes, or null.
+- `results.json` gets an optional field `replay`: `{"file": "replay.bin", "id": "..."}`. The id
+  is random and new for each run. The GUI plays a replay only when its id is the one in
+  `results.json`. So a replay that an older run left in the folder is never shown as the
+  replay of a newer run. It is a new optional field, so `schema_version` stays 1, and
+  `results.schema.json` describes it.
+- The header holds no file path, as a report holds none by default (section 6.8).
+- The file has no `.json` name, so the scan of a folder never reads it.
+
+To read it without the GUI:
+
+```python
+import json
+import numpy as np
+
+data = open("replay.bin", "rb").read()
+n = int.from_bytes(data[12:16], "little")
+header = json.loads(data[16 : 16 + n])
+values = np.frombuffer(data, "<f4", offset=16 + n)
+clip = header["clips"][0]
+width = 1 + 7 * (len(header["bodies"]) + (clip["box"] is not None))
+frames = values[clip["offset"] : clip["offset"] + clip["frames"] * width].reshape(clip["frames"], width)
+```
+
+**Size.** A frame takes 4 × (1 + 7 × bodies) bytes, and there are about 30 frames in each second of
+simulated time. Estimates from the rule numbers in spec.md, not measured:
+
+| Asset | Bodies | Simulated time | Size |
+|---|---|---|---|
+| an appliance with two doors: DROP and PASSIVE | 3 | up to 40 s | under 200 kB |
+| an arm of 6 joints, such as a UR5e | 7 | about 130 s | under 1 MB |
+| AgiBot's G2, 46 joints | about 50 | about 420 s | about 18 MB |
+
+**Cost.** Each frame reads the pose of every body from the engine. In Newton, it also waits for
+the GPU, and the CUDA graphs are shorter. This cost is not measured yet. Phase 4 measures it on
+the G2 in both engines (section 11).
+
+**The same results.** Recording reads the state and never writes it. So `results.json` must be
+the same with and without `--replay`, apart from `seconds` and `replay`. In Newton, graphs of 16
+steps run the same steps in the same order as graphs of 50. The tests in section 9 check this.
+
+**When a run stops:**
+
+- An asset that stops with an error gets the clips recorded before the error.
+- The frames stay in memory until the asset ends. So a worker that crashes in the middle of an
+  asset writes no replay for it.
+
 ## 6. Screens
 
 The phase of each screen is in brackets (section 8).
@@ -270,6 +410,8 @@ the matrix of a folder.
 - **Settings:** settle time and floor. Each shows the spec's value next to it. A value that is not
   the spec's gets a mark here and on every screen of its results, because `results.json` then
   says that the settings differ from the spec.
+- **Replay (phase 4):** record the motion of each check (`--replay`, section 5.5). Whether it is
+  ticked by default is open (section 11). `batch.json` records the choice.
 - **The command:** the command line each worker will run, to copy, so a run from the GUI can be
   repeated without it.
 - **Start:** the GUI tests each engine's Python again, writes `batch.json`, and queues the runs.
@@ -311,6 +453,8 @@ folded away.
   engine can make it fail. The level is 0.8 by default. It is a GUI setting, not a rule of the spec,
   and it never changes a verdict. In Newton it matters most, because its results can differ from
   run to run (spec.md section 5).
+- When the run has a replay (phase 4), each row has a play button. It opens the inspector and
+  plays the clips of that measurement (section 6.11). A row of LOAD has none: LOAD gives no clip.
 
 **Checks:** each check with its title, verdict, detail line as written (one part per line, and a
 part that ends with FAIL marked), measurements, and a link to
@@ -321,7 +465,8 @@ come last, each with its reason.
 **Results without measurements** (tool 0.2.0 and older): the screen shows the detail lines and says
 why there is no joints table.
 
-**Actions:** 3D view and inspector (phase 3), compare, copy the command line, open the folder.
+**Actions:** 3D view and inspector (phase 3), the replay of each check (phase 4), compare, copy the
+command line, open the folder.
 
 ### 6.5 Inspector (phase 3, built)
 
@@ -363,7 +508,8 @@ A switch shows the plan for PhysX or for Newton.
   with the selected joint's name, so a joint picked in a table below shows at once. "Full view"
   scrolls back up; "×" closes it until the next pick. The view keeps its place on the page, so the
   page does not jump.
-- `results.json` holds no poses, so the view shows the file pose only (section 10).
+- The view shows the file pose. When a run has a replay, the same view also plays the motion of
+  each check (section 6.11).
 
 ### 6.7 Compare (phase 1)
 
@@ -391,6 +537,8 @@ Two or more runs side by side: verdicts, and with measurements, the values and t
   with `wheels_without_mobile` carries "wheels not checked".
 - **Paths:** `results.json` holds the full path of the asset, which can hold a user name. The report
   shows the file name only, unless the user asks for full paths.
+- **Replay:** the report says that a run has a replay, and leaves the motion out. A replay can be
+  18 MB (section 5.5), and the report must stay one file that opens by itself.
 - **Look:** that of the reports on proofmass.com, for a report that goes to a customer. The file
   carries the logo and the latin files of the fonts, so it looks the same on any computer.
 
@@ -412,6 +560,50 @@ an experiment must stay apart from the checks. If it is built:
 - A report or a comparison never shows an experiment without that mark.
 
 Whether to build it, and where, is open (section 11).
+
+### 6.11 Replay (phase 4)
+
+The motion of each check, from `replay.bin` (section 5.5), in the 3D view of the inspector (section
+6.6). The colliders come from `inspect`, as before. So the replay needs the same Python with pxr as
+the inspector (section 4.1).
+
+- **Opening it:** the play button of a measurement row in the asset view (section 6.4) opens the
+  inspector of the run, selects the row's joint, and plays the clips of that measurement. These
+  are the clips of the measurement's check with its subject and case. When there are none, they
+  are the clips of its check with an empty subject: the one clip of HOLD or DROP, or the 50 of
+  STABLE.
+- **The clips:** a list below the view, grouped by check, in the order they ran. Each clip shows
+  its subject, case, attempt, length and `ok` as a sign. A filter shows only the clips that are
+  not ok, such as the unstable poses of STABLE or the load at which the grip slipped.
+- **Controls:** play and pause (Space), a time bar to drag, one frame back or forward (← and →),
+  the previous or next clip, a speed from 0.1× to 2× of the simulated time, and loop.
+- **Time:** each frame has its time. So the player shows the frame of the current time, and leaves
+  out a frame that it cannot draw in time. A large asset then plays at the right speed with fewer
+  frames.
+- **What it draws:** the colliders at the pose of each frame. The view keeps each collider's
+  triangles in its body's frame and moves them with the body. A joint's marks move with its first
+  body (body0). For each operation, also:
+  - settle and move: the clip's joint selected, with its target as a tick on its range;
+  - push: an arrow about or along the joint's axis, with the effort;
+  - trial: the grip box as a solid box, and the pull as an arrow with the load. In SHAKE, the
+    arrow follows the force;
+  - drive: the path of the root body on the floor, and the +X arrow.
+- **Text in the view:** the check, subject, case and attempt, the time, and at the last frame the
+  measurement's value and limit with its sign.
+- **Values that are not finite:** the view stops at the last finite frame, and says from which
+  time the engine gave values that are not finite.
+- **Camera:** a clip starts with a view that holds all its frames, so a robot that drives 2 m
+  stays in the view. The user moves the view as before, while the clip plays.
+- **Docked:** the docked view (section 6.6) keeps playing.
+- **Which run:** the GUI plays a replay only when its id is the one in `results.json` (section
+  5.5). The inspector reads the asset as it is now. When its SHA-256 is not the run's, the view
+  says that the colliders can differ from those of the run. A body of the replay that the asset
+  no longer has is not drawn, and the view says so.
+- **Newton:** a replay is one run of Newton, and another run can differ (spec.md section 5). The
+  Newton note stays above the view.
+- **Server:** `GET /api/replay?folder=…&run=…` sends the replay of a run. It takes the name from
+  `replay.file` in `results.json`. The name must be a file name only, without a folder or "..",
+  and the file must be in the folder of the results file.
 
 ## 7. How results are shown
 
@@ -437,11 +629,13 @@ Whether to build it, and where, is open (section 11).
 | 1. Viewer | server, batches, batch view, asset view, compare, report | 5.1 measurements. The viewer also works without them. | it opens the Lightwheel and AgiBot result folders, compares PhysX with Newton, and exports a report |
 | 2. Runner | new batch, live progress, settings | 5.2 events, 5.4 several assets | a batch of 10 assets runs from the GUI in PhysX and Newton, can be cancelled, and gives the same `results.json` as the command line |
 | 3. Inspector and 3D | inspector, 3D view | 5.3 inspect | the inspector shows the plan before a run, and the 3D view marks the joints that fail |
-| 4. Experiments | after the decision in section 11 | | |
+| 4. Replay | the replay in the inspector, the play button, the batch option | 5.5 the replay | a run of the G2 in PhysX and in Newton plays every clip, `results.json` is the same with and without `--replay` (in Newton, the verdicts), and the cost of recording is measured |
+| 5. Experiments | after the decision in section 11 | | |
 
 Phases 1 to 3 are built. Phase 2 was tested with a fake worker (section 9). Its "done when", a
 batch of 10 assets in PhysX and Newton, is still to run on the real engines. Phase 3 was tested on
-the test assets of `tests/usd_assets.py`, not yet on a large package such as the G2.
+the test assets of `tests/usd_assets.py`, not yet on a large package such as the G2. Phase 4 is
+designed (sections 5.5 and 6.11) and not built.
 
 ## 9. Tests
 
@@ -452,12 +646,20 @@ the test assets of `tests/usd_assets.py`, not yet on a large package such as the
 - **Workers:** `tests/fake_worker.py` writes events and results as `run` does, so no engine is
   needed. It can crash in the middle of an asset, or wait to be cancelled.
 - **Changes in section 5:** unit tests as for any change, and the GPU tests for 5.4.
+- **Replay:** the fake engine records frames, so CI tests the file (header, offsets, sizes), that
+  each clip of each check has a label, and that each measurement finds its clips. A test runs
+  each check with the fake engine with and without `--replay`, and compares `results.json`
+  without `seconds` and `replay`. The GPU tests do the same in both engines: in Newton they
+  compare the verdicts only (section 5.4).
 - **Front end:** open (section 11).
 
 ## 10. Not in this design
 
 - Editing the USD, or fixing an asset.
-- A replay of the simulation. `results.json` holds no poses, so it would need a new output.
+- Render meshes in the replay. The frames of `replay.bin` could become a USD layer of time samples
+  over the asset, so that usdview or Isaac Sim plays a check with the asset's own meshes. That can
+  come later, from the same file.
+- Two replays side by side, such as PhysX and Newton for one measurement.
 - Engines in the browser. proofmass-lab runs MuJoCo in the browser for lessons, not for checks.
 - An Isaac Sim extension. It would tie the GUI to PhysX.
 - Shared or remote use.
@@ -467,7 +669,8 @@ the test assets of `tests/usd_assets.py`, not yet on a large package such as the
 | Decision | Options | Recommendation |
 |---|---|---|
 | Which user comes first | the auditor, or the asset maker | the auditor. The batch view and compare serve both users, and the audits are the work done now. |
-| Experiments | in this package, in proofmass-lab, or not at all | decide before phase 4 |
+| Experiments | in this package, in proofmass-lab, or not at all | decide before phase 5 |
+| Replay ticked by default in a new batch | ticked, or not | ticked, if recording adds less than 10 % to a run of the G2 in both engines (phase 4 measures it) |
 | The command's name | `gui`, `view` or `serve` | `gui` |
 | Front-end tests | Playwright (adds Node to the tools for development), or by hand | by hand in phase 1, then decide |
 | Public reports | the report of section 6.8 is also the template for reports on proofmass.com, or not | decide in phase 1 |
