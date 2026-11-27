@@ -22,7 +22,7 @@ import newton
 import numpy as np
 import warp as wp
 from mujoco_warp import OverflowType
-from pxr import Usd
+from pxr import Usd, UsdPhysics
 
 from proofmass_check.engines.base import (
     DropOutcome,
@@ -178,11 +178,13 @@ class _Sim:
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             for name, value in asset.variants.items():
                 stage.GetDefaultPrim().GetVariantSet(name).SetVariantSelection(value)
+            for path in asset.free_roots:  # left out by the reader, and Newton would not build them
+                UsdPhysics.Joint(stage.GetPrimAtPath(path)).CreateJointEnabledAttr(False)
         builder = newton.ModelBuilder()
         newton.solvers.SolverMuJoCo.register_custom_attributes(builder)  # so the importer reads the mjc: data
-        # A wheeled robot's base is held up: the importer fixes the root to the world, lifted by hold_base.
+        # A held base: the importer fixes the root to the world, lifted by hold_base (a wheeled robot's, or 0).
         import_options = {}
-        if hold_base:
+        if hold_base is not None:
             import_options = {"floating": False, "xform": wp.transform((0.0, 0.0, hold_base), wp.quat_identity())}
         try:
             info = builder.add_usd(stage, **import_options)

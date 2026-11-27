@@ -29,7 +29,7 @@ from proofmass_check.engines.base import (
     Motion,
 )
 from proofmass_check.engines.capabilities import CAPABILITIES, supported
-from proofmass_check.geometry import quat_to_matrix
+from proofmass_check.geometry import matrix_to_quat, quat_to_matrix
 from proofmass_check.model import Asset, Joint
 from proofmass_check.rules import GRAVITY
 
@@ -107,7 +107,7 @@ class PhysxEngine:
     def scene(self, step: float = STEP, box=None, held: bool = True):
         """The current stage, or a new one when the asset, the step, the grip box or the base hold changes.
 
-        held: hold a wheeled robot's base up (open's hold_base). Only drop and drive leave it free.
+        held: hold the base as open's hold_base says. Only drop and drive leave it free.
         """
         hold = self.hold_base if held else None
         key = (id(self.asset), step, id(box), hold)
@@ -237,7 +237,8 @@ class _Scene:
         from isaacsim.core.api import World
         from isaacsim.core.api.objects.ground_plane import GroundPlane
         from isaacsim.core.prims import RigidPrim, SingleArticulation, SingleRigidPrim
-        from isaacsim.core.utils.stage import add_reference_to_stage, create_new_stage
+        from isaacsim.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
+        from pxr import UsdPhysics
 
         self.asset, self.step = asset, step
         World.clear_instance()
@@ -248,7 +249,9 @@ class _Scene:
         prim = add_reference_to_stage(asset.file, ROOT)
         for name, value in asset.variants.items():
             prim.GetVariantSets().GetVariantSet(name).SetVariantSelection(value)
-        if hold:
+        for path in asset.free_roots:  # left out by the reader: the checks hold the base instead
+            UsdPhysics.Joint(get_current_stage().GetPrimAtPath(self.stage_path(path))).CreateJointEnabledAttr(False)
+        if hold is not None:
             self._hold_base(hold)
         self.box = _add_box(self.world, box, asset) if box else None
         self.body_paths = list(asset.bodies)
@@ -285,15 +288,17 @@ class _Scene:
         self.world.reset()
 
     def _hold_base(self, lift: float) -> None:
-        """A fixed joint that holds the root body lift (m) above its file pose. It assumes the body is not turned."""
+        """A fixed joint that holds the root body lift (m) above its file pose, turned as the file turns it."""
         from isaacsim.core.utils.stage import get_current_stage
         from pxr import Gf, UsdPhysics
 
         pin = UsdPhysics.FixedJoint.Define(get_current_stage(), f"{ROOT}/proofmass_check_hold_base")
         pin.CreateBody1Rel().SetTargets([self.stage_path(self.asset.root_body)])
-        x, y, z = self.asset.bodies[self.asset.root_body].pose[:3, 3]
+        pose = self.asset.bodies[self.asset.root_body].pose
+        x, y, z = pose[:3, 3]
         pin.CreateLocalPos0Attr(Gf.Vec3f(float(x), float(y), float(z + lift)))
-        pin.CreateLocalRot0Attr(Gf.Quatf(1, 0, 0, 0))
+        w, qx, qy, qz = (float(v) for v in matrix_to_quat(pose[:3, :3]))
+        pin.CreateLocalRot0Attr(Gf.Quatf(w, qx, qy, qz))
         pin.CreateLocalPos1Attr(Gf.Vec3f(0, 0, 0))
         pin.CreateLocalRot1Attr(Gf.Quatf(1, 0, 0, 0))
 

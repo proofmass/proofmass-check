@@ -8,6 +8,22 @@ and the spec version.
 
 ## [Unreleased]
 
+### Changed
+
+- Spec 0.5: an asset with a position drive that is neither fixed to the world nor a wheeled robot is
+  held. The checks fix its root body where the file puts it, as a scene fixes an arm, and give it no
+  floor, so they test its drives and not how it stands. A note says so, and the GUI's inspector too.
+  A gripper held in this way gets GRIP and SHAKE.
+- Spec 0.5: a D6 joint between a body and the world with all six axes free, no limit and no drive is
+  left out, and the engines switch it off; the asset is then held. Isaac Sim writes one at the root
+  of an articulation (Franka Panda's `rootJoint`). PhysX kept the base in place with it, and gives
+  the same results held. Newton did not build it, and LOAD failed: held, Franka builds and runs in
+  Newton. inspect lists such joints in `free_roots`.
+
+### Fixed
+
+- PhysX held a wheeled robot's base turned to the world's axes. It now holds it as the file turns it.
+
 ## [0.4.0] - 2026-11-26
 
 The checks follow docs/spec.md, version 0.4. Two rules changed, both from a run of the robots that

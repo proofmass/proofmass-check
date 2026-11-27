@@ -950,7 +950,8 @@ async function inspectView(spec) {
     h('p', {class: 'sub'}, h('span', {class: 'mono'}, d.file)),
     h('p', {class: 'sub'}, `${d.bodies.length} bodies · ${moving.length} moving joint${moving.length === 1 ? '' : 's'} · `,
       d.articulated ? 'an articulation' : 'no PhysicsArticulationRootAPI', ' · ',
-      d.world_fixed.length ? `fixed to the world by ${d.world_fixed.join(', ')}` : 'free', ' · ',
+      d.world_fixed.length ? `fixed to the world by ${d.world_fixed.join(', ')}`
+        : d.held ? 'not fixed to the world: the checks hold its base' : 'free', ' · ',
       typeof d.floor === 'number' ? `floor at ${(d.floor * 1000).toFixed(1)} mm` : 'no floor',
       sets.length ? ` · variants ${Object.entries(d.variants).map(([k, v]) => `${k}=${v}`).join(' ') || 'none selected'}` : ''),
     sets.length ? h('p', {class: 'sub'}, 'Variant sets: ', sets.map(([k, vs]) => `${k} (${vs.join(', ')})`).join('; ')) : null,

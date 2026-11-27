@@ -33,6 +33,26 @@ def quat_to_matrix(q) -> np.ndarray:
     )
 
 
+def matrix_to_quat(r: np.ndarray) -> np.ndarray:
+    """The unit quaternion (w, x, y, z), w >= 0, of a 3x3 rotation: the inverse of quat_to_matrix."""
+    r = np.asarray(r, float)
+    # Shepperd's method: start from the largest of w, x, y, z, so the division is never by a small number.
+    trace = np.trace(r)
+    k = int(np.argmax([trace, r[0, 0], r[1, 1], r[2, 2]]))
+    if k == 0:
+        w = math.sqrt(1 + trace) / 2
+        q = [w, (r[2, 1] - r[1, 2]) / (4 * w), (r[0, 2] - r[2, 0]) / (4 * w), (r[1, 0] - r[0, 1]) / (4 * w)]
+    else:
+        i, j, m = k - 1, k % 3, (k + 1) % 3
+        v = [0.0, 0.0, 0.0]
+        v[i] = math.sqrt(1 + 2 * r[i, i] - trace) / 2
+        v[j] = (r[j, i] + r[i, j]) / (4 * v[i])
+        v[m] = (r[m, i] + r[i, m]) / (4 * v[i])
+        q = [(r[m, j] - r[j, m]) / (4 * v[i]), *v]
+    q = np.array(q) / np.linalg.norm(q)
+    return q if q[0] >= 0 else -q
+
+
 def tilt(r0: np.ndarray, r1: np.ndarray) -> float:
     """The angle (rad) between the Z axes of two rotations."""
     return math.acos(float(np.clip(r0[:, 2] @ r1[:, 2], -1.0, 1.0)))
@@ -52,12 +72,13 @@ def lowest_collider(body: Body, rotation: np.ndarray, position: np.ndarray) -> f
 
 
 def run_floor(asset, settings) -> float | None:
-    """The floor of a run: under an asset that stands free, none under one fixed to the world (spec, section 1).
+    """The floor of a run: under an asset that stands free, none under one fixed to the world or held
+    (spec, section 1).
 
     A fixed arm needs no floor, and one in its file pose can reach through it: a floor there stops the
-    arm, not its drives.
+    arm, not its drives. An arm the checks hold is the same.
     """
-    if not settings.floor or asset.world_fixed:
+    if not settings.floor or asset.world_fixed or asset.held:
         return None
     return floor_height(asset.bodies.values())
 

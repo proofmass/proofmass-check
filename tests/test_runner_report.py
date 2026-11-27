@@ -82,6 +82,21 @@ def test_checks_the_engine_cannot_run_are_in_the_results(gripper):
     assert note in data["notes"]
 
 
+def test_an_arm_not_fixed_to_the_world_is_held(loose_arm, arm):
+    """Spec 0.5: the joint checks hold the root body where the file puts it, with no floor, and a note says so."""
+    engine = IdealEngine()
+    run = run_checks(engine, loose_arm, Settings())
+    assert engine.hold_base == 0.0 and engine.floor is None and run.floor is None
+    left_out = "rootJoint joins the asset to the world with every axis free, so it is left out (spec, section 2)"
+    held = "the asset is not fixed to the world: the checks hold its root body (base) where the file puts it"
+    assert left_out in run.notes and any(n.startswith(held) for n in run.notes)
+    verdicts = {r.id: r.verdict for r in run.results}
+    assert verdicts["DROP"] == "N/A" and verdicts["HOLD"] == verdicts["TRACK"] == "PASS"
+    fixed = IdealEngine()
+    run_checks(fixed, arm, Settings())
+    assert fixed.hold_base is None
+
+
 def test_wheels_without_their_description_are_in_the_results(rover):
     run = run_checks(IdealEngine(), dataclasses.replace(rover, wheeled=None), Settings())
     data = report.to_dict(run)

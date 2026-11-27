@@ -53,6 +53,8 @@ def inspect_asset(file: Path, engine: str, requested: list[str], settings: Setti
         "articulated": asset.articulated,
         "root_body": asset.root_body,
         "world_fixed": list(asset.world_fixed),
+        "held": asset.held,  # the checks hold the root body where the file puts it (spec, section 3)
+        "free_roots": list(asset.free_roots),
         "plan": [{"id": c, "title": TITLES[c], "runs": plan.runs(c), "reason": plan.skip.get(c)} for c in TITLES],
         "notes": list(plan.notes),
         "bodies": [_body(b, geometry) for b in asset.bodies.values()],

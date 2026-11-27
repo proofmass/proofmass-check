@@ -103,7 +103,9 @@ def test_choose_site(gripper):
         "gripper site b: GRIP tests one site, grasp, so GRIP does not test it",
     ]
     free = dataclasses.replace(gripper, joints=tuple(j for j in gripper.joints if j.kind != "fixed"))
-    assert choose_site(free) == (
+    assert free.held and choose_site(free)[0] is site  # spec 0.5: the checks hold a free gripper with position drives
+    undriven = dataclasses.replace(free, joints=tuple(dataclasses.replace(j, drive=None) for j in free.joints))
+    assert choose_site(undriven) == (
         None,
         ["gripper site grasp: the gripper is not fixed to the world, so GRIP does not test it"],
     )

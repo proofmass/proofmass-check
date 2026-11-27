@@ -53,7 +53,7 @@ def run_checks(engine: Engine, asset: Asset, settings: Settings, events: Callabl
     if engine.reads_mjc_actuators:
         asset = asset.with_mjc_drives()
     floor = run_floor(asset, settings)
-    engine.open(asset, floor, BASE_LIFT if asset.wheeled else None)
+    engine.open(asset, floor, BASE_LIFT if asset.wheeled else 0.0 if asset.held else None)
     emit("check", id="LOAD", total=None)
     outcome = engine.load()
     results = {"LOAD": load(asset, outcome)}

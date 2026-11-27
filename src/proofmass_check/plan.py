@@ -60,6 +60,15 @@ def make_plan(
     for check_id in cannot:
         skip[check_id] = f"the {engine} engine cannot run this check on this asset yet"
     notes = list(notes)
+    if asset.free_roots:
+        names = ", ".join(path.rsplit("/", 1)[-1] for path in asset.free_roots)
+        notes.append(f"{names} joins the asset to the world with every axis free, so it is left out (spec, section 2)")
+    if asset.held:
+        root = asset.root_body.rsplit("/", 1)[-1]
+        notes.append(
+            f"the asset is not fixed to the world: the checks hold its root body ({root}) where the file puts it, "
+            "as a scene fixes an arm (docs/spec.md, section 3)"
+        )
     if cannot:  # a PASS does not cover these: the run must say so where a reader of the verdict looks
         notes.append(
             f"the {engine} engine cannot run {', '.join(cannot)} on this asset yet, so this result does not cover them"

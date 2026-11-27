@@ -23,6 +23,7 @@ def test_inspect_the_arm(tmp_path):
     data = inspect_asset(usd_assets.arm(tmp_path / "arm.usda"), "physx", [], Settings(), geometry=False)
     json.dumps(data, allow_nan=False)  # strict JSON: no NaN or infinity
     assert data["name"] == "unit_arm" and data["articulated"] and data["world_fixed"] == ["root_joint"]
+    assert data["held"] is False and data["free_roots"] == []
     plan = plan_of(data)
     assert plan["HOLD"] == (True, None) and plan["SPEED"] == (True, None)
     assert plan["DROP"] == (False, "the asset is fixed to the world by root_joint")

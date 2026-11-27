@@ -223,6 +223,7 @@ class Asset:
     sites: tuple[GripperSite, ...] = ()
     articulated: bool = False  # some prim has PhysicsArticulationRootAPI
     wheeled: WheeledBase | None = None  # from SimReady_Metadata.mobile; None for a robot without wheels
+    free_roots: tuple[str, ...] = ()  # D6 joints to the world with every axis free, left out: the base is held
     _by_name: dict[str, Joint] = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -244,6 +245,16 @@ class Asset:
     def world_fixed(self) -> tuple[str, ...]:
         """Fixed joints with one side empty: they hold the asset to the world."""
         return tuple(j.name for j in self.joints if j.kind == "fixed" and (j.body0 is None) != (j.body1 is None))
+
+    @property
+    def held(self) -> bool:
+        """Not fixed to the world, not a wheeled robot, and with a position drive: the checks hold its root body
+        where the file puts it, as a scene fixes an arm (spec, section 3)."""
+        return (
+            not self.world_fixed
+            and self.wheeled is None
+            and any(j.moves and j.drive_kind == "position" for j in self.joints)
+        )
 
     @property
     def root_body(self) -> str:
