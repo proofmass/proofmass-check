@@ -10,6 +10,17 @@ and the spec version.
 
 ### Added
 
+- The GUI plays the replay of a run (docs/gui.md, section 6.11). On a run's page, ▶ in a row of the
+  measurements opens the inspector and plays the clips of that measurement in its 3D view, and
+  "Replay the checks" starts at the first clip that is not ok. The view moves the colliders to
+  each frame, and draws the target of a drive, a push, the grip box with its pull, and the path a
+  wheeled robot drove. Controls: play and pause (Space), a time bar, one frame back and forward
+  (← →), the previous and next clip, speed 0.1× to 2×, loop. The server sends a replay only when
+  its id is the run's. A new batch has a Replay box, not ticked, which adds `--replay`; the HTML
+  report says that a run has a replay.
+- inspect gives `sha256`, of the root file, so the player can say when the asset changed after the
+  run. A grip trial's clip also records `close_seconds`, `pull_seconds` and `shake_hz`.
+
 - INERTIA (spec 0.5): each body whose USD gives its mass and inertia must have an inertia within
   `INERTIA_MIN_RATIO` = 0.01 and `INERTIA_MAX_RATIO` = 100 of that of its mass spread over its
   collider points (the traces). It reads the file and runs nothing, so it gives the same result in

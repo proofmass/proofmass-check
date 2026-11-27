@@ -430,28 +430,37 @@ async function runView(folderId, runId) {
     ['Settings', settingsText(d.settings)],
     ['Time', seconds(d.seconds) || 'not recorded'],
     ['Results file', `${d.id} in ${folder.path}`],
+    ['Replay', d.replay ? 'recorded: ▶ in a row of the measurements plays it in the inspector' : 'none (run --replay records one)'],
   ];
+  // The inspector of this run's asset, with its engine, variants and floor (docs/gui.md, section 6.5).
+  const inspected = {file: d.file, engine: ['physx', 'newton'].includes(d.engine) ? d.engine : 'physx',
+    variants: Object.entries(d.variants).map(([k, v]) => `${k}=${v}`), floor: d.settings.floor !== null, run: [folderId, runId]};
+  // LOAD and INERTIA run no step, so they have no clip in a replay (docs/gui.md, section 5.5).
+  const playable = m => d.replay && !['LOAD', 'INERTIA'].includes(m.check);
+  const playLink = m => h('a', {class: 'play', href: inspectHref({...inspected, play: {check: m.check, subject: m.subject, case: m.case}}),
+    title: 'Play the clips of this measurement in the inspector', 'aria-label': `Play ${[m.check, m.subject, m.case].filter(Boolean).join(' ')}`}, '▶');
   const checks = [...d.checks.filter(c => c.verdict !== 'N/A'), ...d.checks.filter(c => c.verdict === 'N/A')];
   const measured = d.measurements.length
     ? [h('h2', {}, 'Measurements', h('span', {class: 'muted'}, 'of each joint, body and site, the ones that failed first, then by margin')),
       h('div', {class: 'scroll'}, h('table', {},
         h('thead', {}, h('tr', {}, ['Subject', 'Check', 'Case', 'Quantity'].map(t => h('th', {}, t)),
-          h('th', {class: 'num'}, 'Value'), h('th', {class: 'num'}, 'Limit'), h('th', {}, 'Margin'), h('th', {class: 'c'}, ''))),
+          h('th', {class: 'num'}, 'Value'), h('th', {class: 'num'}, 'Limit'), h('th', {}, 'Margin'), h('th', {class: 'c'}, ''),
+          d.replay ? h('th', {class: 'c'}, 'Replay') : null)),
         h('tbody', {}, d.measurements.map(m => h('tr', {},
           h('td', {class: 'mono'}, subject(m.subject)), h('td', {class: 'mono'}, m.check), h('td', {}, m.case), h('td', {}, m.quantity),
           h('td', {class: 'num'}, `${m.shown_value} ${m.shown_unit}`),
           h('td', {class: 'num'}, m.shown_limit === '' ? '' : `${m.bound === 'min' ? '≥' : '≤'} ${m.shown_limit} ${m.shown_unit}`),
           h('td', {}, marginBar(m.margin)),
-          h('td', {class: 'c'}, sign(m.ok ? 'PASS' : 'FAIL'))))))),
+          h('td', {class: 'c'}, sign(m.ok ? 'PASS' : 'FAIL')),
+          d.replay ? h('td', {class: 'c'}, playable(m) ? playLink(m) : null) : null))))),
     ]
     : [banner('This results file has no measurements, so the page shows the detail text of each check only. '
       + 'The numbers for margins come with the measurements field (docs/gui.md, section 5.1).', true)];
   fill(main,
     h('h1', {}, d.asset, result(d, true), h('span', {class: 'sub'}, d.engine)),
     h('div', {class: 'toolbar'}, tick,
-      h('a', {class: 'button', href: inspectHref({file: d.file, engine: ['physx', 'newton'].includes(d.engine) ? d.engine : 'physx',
-        variants: Object.entries(d.variants).map(([k, v]) => `${k}=${v}`), floor: d.settings.floor !== null, run: [folderId, runId]})},
-        'Inspect the asset'),
+      h('a', {class: 'button', href: inspectHref(inspected)}, 'Inspect the asset'),
+      d.replay ? h('a', {class: 'button', href: inspectHref({...inspected, play: {}})}, 'Replay the checks') : null,
       h('button', {onclick: () => download([[folderId, runId]], 'html', `${d.asset}-${d.engine}`, say.say)}, 'Save HTML'),
       h('button', {onclick: () => download([[folderId, runId]], 'csv', `${d.asset}-${d.engine}`, say.say)}, 'Save CSV')),
     say,
@@ -626,7 +635,7 @@ function drawPanel(panel, b, refresh) {
   const other = b.runs.filter(r => r.version && r.version.split(' ')[1] !== state.version);
   fill(panel,
     h('h2', {}, 'Runs', h('span', {class: 'muted'}, `${b.created} · settle ${b.settle_s} s · `
-      + `${b.floor ? 'floor' : 'no floor'}${b.variants.length ? ` · ${b.variants.join(' ')}` : ''}`),
+      + `${b.floor ? 'floor' : 'no floor'}${b.variants.length ? ` · ${b.variants.join(' ')}` : ''}${b.replay ? ' · replay' : ''}`),
       busy ? h('button', {onclick: () => cancelRun(b, null, refresh)}, 'Cancel the batch') : null),
     b.runs.filter(r => r.error).map(r => banner(`${r.id}: the engine did not start: ${r.error}. Its log says more.`)),
     other.map(r => banner(`${r.id} ran ${r.version}, and this page is ${state.version}.`)),
@@ -720,6 +729,7 @@ async function newBatchView() {
   const repeats = h('input', {type: 'number', min: 1, max: 20, step: 1, value: 1, 'aria-label': 'Runs of each asset in Newton'});
   const settle = h('input', {type: 'number', min: 0.1, max: 60, step: 0.1, value: 1.5, 'aria-label': 'Settle time in s'});
   const floor = h('input', {type: 'checkbox', checked: true});
+  const replayBox = h('input', {type: 'checkbox'});  // not ticked: recording makes a run longer (docs/gui.md, 5.5)
   const variants = h('input', {type: 'text', size: 40, placeholder: 'Physics=PhysX', 'aria-label': 'Variants, SET=VALUE'});
   const preview = h('div');
   const visible = () => files.filter(f => !filter.value || f.name.toLowerCase().includes(filter.value.toLowerCase()));
@@ -729,7 +739,7 @@ async function newBatchView() {
       name: name.value, assets: files.filter(f => f.ticked).map(f => f.path),
       engines: engineBoxes.filter(e => e.box.checked).map(e => e.name),
       repeats: Number(repeats.value), settle_s: Number(settle.value), floor: floor.checked,
-      variants: variants.value.split(/[\s,]+/).filter(Boolean),
+      variants: variants.value.split(/[\s,]+/).filter(Boolean), replay: replayBox.checked,
     };
   }
 
@@ -787,7 +797,7 @@ async function newBatchView() {
       say.say(e.message, true);
     }
   };
-  for (const input of [name, repeats, settle, floor, variants, ...engineBoxes.map(e => e.box)]) input.addEventListener('input', update);
+  for (const input of [name, repeats, settle, floor, replayBox, variants, ...engineBoxes.map(e => e.box)]) input.addEventListener('input', update);
   fill(main, h('h1', {}, 'New batch'),
     h('p', {class: 'sub'}, 'Every asset runs in each engine you choose. The engine starts once for all the assets of a run, ',
       'and one run goes at a time. The results go to the workspace: ', h('span', {class: 'mono'}, s.workspace), '.'),
@@ -808,6 +818,8 @@ async function newBatchView() {
     h('div', {class: 'toolbar'}, h('label', {}, 'Settle time, s', settle), h('span', {class: 'muted'}, 'spec: 1.5')),
     h('div', {class: 'toolbar'}, h('label', {}, floor, 'Floor'), h('span', {class: 'muted'}, 'off: no floor under any asset. An asset fixed to the world never gets one')),
     h('div', {class: 'toolbar'}, h('label', {}, 'Variants', variants), h('span', {class: 'muted'}, 'SET=VALUE, more than one with spaces')),
+    h('div', {class: 'toolbar'}, h('label', {}, replayBox, 'Replay'), h('span', {class: 'muted'},
+      'record the motion of each check, to play it in the inspector (--replay). It made runs in Newton about 20 % longer')),
     h('h2', {}, 'Commands', h('span', {class: 'muted'}, 'what each run will start')),
     preview,
     h('div', {class: 'toolbar'}, h('button', {class: 'primary', onclick: start}, 'Start the batch')),
@@ -862,9 +874,10 @@ async function inspectView(spec) {
   const d = await apiJson('/api/inspect', {file: spec.file, engine, variants: spec.variants || [], floor: spec.floor !== false});
   const marks = {};
   let runName = null;
+  let r = null;  // the run's details, when the inspector opened from a run
   if (spec.run) {
     try {
-      const r = await apiJson(`/api/run?folder=${encodeURIComponent(spec.run[0])}&run=${encodeURIComponent(spec.run[1])}`);
+      r = await apiJson(`/api/run?folder=${encodeURIComponent(spec.run[0])}&run=${encodeURIComponent(spec.run[1])}`);
       runName = `${r.asset} · ${r.engine}`;
       for (const m of r.measurements) {
         if (!m.subject) continue;
@@ -894,15 +907,20 @@ async function inspectView(spec) {
     if (!outOfSight) closed = false;
     dock();
   }, {threshold: [0, 0.3, 1]}).observe(slot);
-  const pick = name => {
+  // mark: the joint in the view and its row, without moving the page, as the replay does for its clip.
+  const mark = name => {
     for (const [n, row] of rows) row.classList.toggle('picked', n === name);
     if (viewer) viewer.select(name);
     dockName.textContent = name || d.name;
+  };
+  const pick = name => {
+    mark(name);
     closed = false;
     dock();
     const row = rows.get(name);
     if (row) row.scrollIntoView({block: 'nearest'});
   };
+  const playerBox = h('div');
   const sets = Object.entries(d.variant_sets);
   const byPath = Object.fromEntries(d.bodies.map(b => [b.path, b.name]));
   const moving = d.joints.filter(j => j.kind !== 'fixed');
@@ -962,6 +980,7 @@ async function inspectView(spec) {
       + 'Click a joint here or in the table to find it and see its range: an arc or a segment, with a tick at the file pose. '
       + 'The view shows the colliders, which are what the engine collides. Dashed: the box GRIP closes on. '
       + 'Below this view, a smaller one stays in the corner.'),
+    playerBox,
     h('h2', {}, 'Plan', h('span', {class: 'muted'}, `for ${engine}`)),
     banner(EXPECTED_NOTE, true),
     h('div', {class: 'scroll'}, h('table', {}, h('tbody', {}, d.plan.map(p => h('tr', {},
@@ -1006,6 +1025,23 @@ async function inspectView(spec) {
       h('summary', {}, h('span', {class: 'mono'}, j.name), ` · ${j.prim} · ${j.schemas.join(', ') || 'no applied schemas'}`),
       h('div', {class: 'attributes'}, Object.entries(j.attributes).map(([k, v]) => `${k} = ${v}`).join('\n') || 'no authored attributes'))));
   viewer = makeViewer(canvas, d, marks, pick);
+
+  // The replay of the run, when it has one (docs/gui.md, section 6.11). The page reads replay.bin whole.
+  if (r && r.replay) {
+    fill(playerBox, h('p', {class: 'status'}, 'Reading the replay…'));
+    try {
+      const res = await api(`/api/replay?folder=${encodeURIComponent(spec.run[0])}&run=${encodeURIComponent(spec.run[1])}`);
+      const replay = parseReplay(await res.arrayBuffer());
+      if (mine !== viewNumber) return;
+      fill(playerBox, makePlayer({replay, viewer, inspect: d, run: r, select: mark, play: spec.play,
+        alive: () => mine === viewNumber}));
+    } catch (e) {
+      if (mine === viewNumber) fill(playerBox, banner(`The replay cannot be shown: ${e.message}`));
+    }
+  } else if (spec.play) {
+    fill(playerBox, banner(r ? 'This run has no replay. Run it with --replay, or tick Replay in a new batch, to record one.'
+      : 'The run of this replay is not open any more: open its folder again.', true));
+  }
 }
 
 window.addEventListener('hashchange', () => { viewNumber += 1; route(); window.scrollTo(0, 0); });

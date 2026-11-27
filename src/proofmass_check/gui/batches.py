@@ -85,6 +85,7 @@ class Request:
     settle_s: float
     floor: bool
     variants: tuple[str, ...]  # SET=VALUE
+    replay: bool = False  # run --replay: each run also records the motion of each check (docs/gui.md, 5.5)
 
     def runs(self) -> list[tuple[str, str]]:
         """(run ID, engine) of each run. PhysX gives the same numbers in every run, so it runs once."""
@@ -106,6 +107,7 @@ def parse_request(body: dict, settings: GuiSettings) -> Request:
         settle_s=settle_s,
         floor=bool(body.get("floor", True)),
         variants=_variants(body.get("variants", [])),
+        replay=body.get("replay") is True,
     )
 
 
@@ -156,7 +158,15 @@ def _numbers(body: dict) -> tuple[int, float]:
 
 
 def command(
-    python: str, engine: str, assets: list[str], run_dir: Path, events: Path, settle_s: float, floor: bool, variants
+    python: str,
+    engine: str,
+    assets: list[str],
+    run_dir: Path,
+    events: Path,
+    settle_s: float,
+    floor: bool,
+    variants,
+    replay: bool = False,
 ) -> list[str]:
     """The command of one worker. Each asset's results go to <run_dir>/<file name>/results.json."""
     out = run_dir / Path(assets[0]).stem if len(assets) == 1 else run_dir
@@ -168,6 +178,8 @@ def command(
         line.append("--no-floor")
     for variant in variants:
         line += ["--variant", variant]
+    if replay:
+        line.append("--replay")
     return line
 
 
@@ -186,6 +198,7 @@ def preview(request: Request, settings: GuiSettings) -> list[dict]:
                 command(
                     settings.python(engine), engine, list(request.assets), folder / run_id,
                     folder / run_id / "events-1.jsonl", request.settle_s, request.floor, request.variants,
+                    request.replay,
                 )
             ),
         }
@@ -399,6 +412,7 @@ class Manager:
             "settle_s": request.settle_s,
             "floor": request.floor,
             "variants": list(request.variants),
+            "replay": request.replay,
             "runs": [
                 {"id": run_id, "engine": engine, "python": settings.python(engine), "version": versions[engine]}
                 for run_id, engine in request.runs()
@@ -454,6 +468,7 @@ class Manager:
             line = command(
                 run["python"], run["engine"], data["assets"], folder / run["id"],
                 folder / run["id"] / "events-1.jsonl", data["settle_s"], data["floor"], data["variants"],
+                data.get("replay", False),
             )  # fmt: skip
             runs.append(run_state(folder, run, data["assets"], live, started) | {"command": shown(line)})
         busy = any(r["state"] in ("running", "queued") for r in runs)
@@ -466,6 +481,7 @@ class Manager:
             "settle_s": data["settle_s"],
             "floor": data["floor"],
             "variants": data["variants"],
+            "replay": data.get("replay", False),  # a batch.json from before the replay has none
             "assets": [{"file": a, "name": Path(a).stem} for a in data["assets"]],
             "runs": runs,
             "state": "running" if busy else "done" if all(r["state"] == "done" for r in runs) else "stopped",
@@ -538,6 +554,7 @@ class Manager:
                 data["settle_s"],
                 data["floor"],
                 data["variants"],
+                data.get("replay", False),
             )
             self._work(line, run_dir / f"log-{number}.txt", run_dir, folder, run_id)
             if not any(e.get("event") == "asset" for e in read_events(events)):

@@ -1,7 +1,7 @@
 # proofmass-check GUI: design
 
 Version 0.5 (draft). Phases 1 to 3, the viewer, the runner and the inspector, are built in 0.3.0
-(section 8). The replay (phase 4) and experiments are not. This file says what the GUI does, how
+(section 8). Phase 4, the replay, is built; experiments are not. This file says what the GUI does, how
 it is built, and what must change in proofmass-check before it. [spec.md](spec.md) stays the
 authority for the checks: the GUI shows what the checks decide, and never decides itself.
 
@@ -261,7 +261,7 @@ starts once. `Engine.open()` loads each asset into the same engine.
 
 ### 5.5 The replay
 
-Built in phase 4 (`replay.py`). The player of section 6.11 is not built yet. `results.json` holds
+Built in phase 4 (`replay.py`), with the player of section 6.11. `results.json` holds
 the numbers that a check compared with its rule, but not the motion that gave them. The engines
 compute the pose of every body at every step, and nothing kept it. The option `--replay` writes
 that motion to `replay.bin`, next to `results.json`:
@@ -300,7 +300,7 @@ With several assets, each asset's folder gets its own `replay.bin`, as it gets i
 | `attempt` | which clip of several for one measurement: `pose 17` in STABLE, `push 74 N m` in PASSIVE, `1.7 kg` in GRIP. Empty when there is one. |
 | `ok` | what the check decided from this clip: the joint reached its target, the pose was stable, the box held |
 | `operation` | `settle`, `move`, `push`, `drop`, `drive` or `trial` |
-| `arguments` | the operation's arguments: the targets, the pushed joint and its effort, the load and its direction |
+| `arguments` | the operation's arguments: the targets, the pushed joint and its effort, the load and its direction. A grip trial also has the grip scene's `close_seconds`, `pull_seconds` and `shake_hz`, so a player knows when the pull starts and how it shakes. |
 
 - The runner gives the check ID, as it does for the `step` events (section 5.2). The grip check
   gives `SHAKE` for its shaken trial. The check gives the rest: it wraps each engine call in
@@ -415,8 +415,9 @@ the matrix of a folder.
 - **Settings:** settle time and floor. Each shows the spec's value next to it. A value that is not
   the spec's gets a mark here and on every screen of its results, because `results.json` then
   says that the settings differ from the spec.
-- **Replay (phase 4):** record the motion of each check (`--replay`, section 5.5). Whether it is
-  ticked by default is open (section 11). `batch.json` records the choice.
+- **Replay (phase 4, built):** record the motion of each check (`--replay`, section 5.5). It is not
+  ticked by default, because recording made runs in Newton 16 to 21 % longer (section 11).
+  `batch.json` records the choice, and the batch's page says "replay".
 - **The command:** the command line each worker will run, to copy, so a run from the GUI can be
   repeated without it.
 - **Start:** the GUI tests each engine's Python again, writes `batch.json`, and queues the runs.
@@ -458,9 +459,9 @@ folded away.
   engine can make it fail. The level is 0.8 by default. It is a GUI setting, not a rule of the spec,
   and it never changes a verdict. In Newton it matters most, because its results can differ from
   run to run (spec.md section 5).
-- When the run has a replay (phase 4), each row has a play button. It opens the inspector and
-  plays the clips of that measurement (section 6.11). A row of LOAD or INERTIA has none: they
-  run no step, so they give no clip.
+- When the run has a replay (phase 4, built), each row has a play button. It opens the inspector
+  and plays the clips of that measurement (section 6.11). A row of LOAD or INERTIA has none: they
+  run no step, so they give no clip. The header says whether the run has a replay.
 
 **Checks:** each check with its title, verdict, detail line as written (one part per line, and a
 part that ends with FAIL marked), measurements, and a link to
@@ -471,8 +472,8 @@ come last, each with its reason.
 **Results without measurements** (tool 0.2.0 and older): the screen shows the detail lines and says
 why there is no joints table.
 
-**Actions:** 3D view and inspector (phase 3), the replay of each check (phase 4), compare, copy the
-command line, open the folder.
+**Actions:** 3D view and inspector (phase 3), "Replay the checks" (phase 4: the inspector with the
+replay of the run, at its first clip that is not ok), compare, copy the command line, open the folder.
 
 ### 6.5 Inspector (phase 3, built)
 
@@ -567,11 +568,11 @@ an experiment must stay apart from the checks. If it is built:
 
 Whether to build it, and where, is open (section 11).
 
-### 6.11 Replay (phase 4)
+### 6.11 Replay (phase 4, built)
 
 The motion of each check, from `replay.bin` (section 5.5), in the 3D view of the inspector (section
 6.6). The colliders come from `inspect`, as before. So the replay needs the same Python with pxr as
-the inspector (section 4.1).
+the inspector (section 4.1). `player.js` reads the file and plays it; `viewer3d.js` draws each frame.
 
 - **Opening it:** the play button of a measurement row in the asset view (section 6.4) opens the
   inspector of the run, selects the row's joint, and plays the clips of that measurement. These
@@ -580,7 +581,9 @@ the inspector (section 4.1).
   STABLE.
 - **The clips:** a list below the view, grouped by check, in the order they ran. Each clip shows
   its subject, case, attempt, length and `ok` as a sign. A filter shows only the clips that are
-  not ok, such as the unstable poses of STABLE or the load at which the grip slipped.
+  not ok, such as the unstable poses of STABLE or the load at which the grip slipped, and another
+  the clips of the measurement it opened with. "Replay the checks" on the run's page starts at the
+  first clip that is not ok.
 - **Controls:** play and pause (Space), a time bar to drag, one frame back or forward (← and →),
   the previous or next clip, a speed from 0.1× to 2× of the simulated time, and loop.
 - **Time:** each frame has its time. So the player shows the frame of the current time, and leaves
@@ -599,17 +602,19 @@ the inspector (section 4.1).
 - **Values that are not finite:** the view stops at the last finite frame, and says from which
   time the engine gave values that are not finite.
 - **Camera:** a clip starts with a view that holds all its frames, so a robot that drives 2 m
-  stays in the view. The user moves the view as before, while the clip plays.
+  stays in the view. The camera keeps its direction. The user moves the view as before, while the
+  clip plays.
 - **Docked:** the docked view (section 6.6) keeps playing.
 - **Which run:** the GUI plays a replay only when its id is the one in `results.json` (section
-  5.5). The inspector reads the asset as it is now. When its SHA-256 is not the run's, the view
-  says that the colliders can differ from those of the run. A body of the replay that the asset
-  no longer has is not drawn, and the view says so.
+  5.5). The inspector reads the asset as it is now, and `inspect` gives the SHA-256 of its root
+  file. When it is not the run's, the view says that the colliders can differ from those of the
+  run. A body of the replay that the asset no longer has is not drawn, and the view says so.
 - **Newton:** a replay is one run of Newton, and another run can differ (spec.md section 5). The
   Newton note stays above the view.
-- **Server:** `GET /api/replay?folder=…&run=…` sends the replay of a run. It takes the name from
-  `replay.file` in `results.json`. The name must be a file name only, without a folder or "..",
-  and the file must be in the folder of the results file.
+- **Server:** `GET /api/replay?folder=…&run=…` sends the replay of a run, and the page reads it
+  whole. It takes the name from `replay.file` in `results.json`. The name must be a file name
+  only, without a folder or "..", and the file must be in the folder of the results file. The
+  answer is 404 when the run has no replay, and 409 when the file's id is not the run's.
 
 ## 7. How results are shown
 
@@ -640,9 +645,10 @@ the inspector (section 4.1).
 
 Phases 1 to 3 are built. Phase 2 was tested with a fake worker (section 9). Its "done when", a
 batch of 10 assets in PhysX and Newton, is still to run on the real engines. Phase 3 was tested on
-the test assets of `tests/usd_assets.py`, not yet on a large package such as the G2. In phase 4,
-the recording (section 5.5) is built and was tested in Newton on the test assets, not yet in
-PhysX. The player (section 6.11) is not built.
+the test assets of `tests/usd_assets.py`, not yet on a large package such as the G2. Phase 4 is
+built: the recording (section 5.5) was tested in Newton on the test assets, and the player
+(section 6.11) was checked by hand in a browser on their replays. Its "done when" still needs a
+run of the G2, and PhysX.
 
 ## 9. Tests
 
@@ -658,6 +664,9 @@ PhysX. The player (section 6.11) is not built.
   each check with the fake engine with and without `--replay`, and compares `results.json`
   without `seconds` and `replay`. The GPU tests do the same in both engines: in Newton they
   compare the verdicts only (section 5.4).
+- **Player:** CI tests which replay file the server sends (its name, and its id against the run's),
+  the batch option, and that every script of the page parses. The player itself was checked by
+  hand in a browser.
 - **Front end:** open (section 11).
 
 ## 10. Not in this design
@@ -677,7 +686,7 @@ PhysX. The player (section 6.11) is not built.
 |---|---|---|
 | Which user comes first | the auditor, or the asset maker | the auditor. The batch view and compare serve both users, and the audits are the work done now. |
 | Experiments | in this package, in proofmass-lab, or not at all | decide before phase 5 |
-| Replay ticked by default in a new batch | ticked, or not | ticked, if recording adds less than 10 % to a run of the G2 in both engines (phase 4 measures it) |
+| Replay ticked by default in a new batch | ticked, or not | not ticked for now: recording made runs of the test assets in Newton 16 to 21 % longer (section 5.5). Ticked, if it adds less than 10 % to a run of the G2 in both engines. |
 | The command's name | `gui`, `view` or `serve` | `gui` |
 | Front-end tests | Playwright (adds Node to the tools for development), or by hand | by hand in phase 1, then decide |
 | Public reports | the report of section 6.8 is also the template for reports on proofmass.com, or not | decide in phase 1 |

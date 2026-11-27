@@ -15,7 +15,7 @@ from proofmass_check.checks.load import built, load, with_engine_masses
 from proofmass_check.checks.passive import passive
 from proofmass_check.checks.speed import speed
 from proofmass_check.checks.wheeled import wheeled
-from proofmass_check.engines.base import Engine
+from proofmass_check.engines.base import Engine, GripSetup
 from proofmass_check.geometry import run_floor
 from proofmass_check.model import Asset
 from proofmass_check.plan import Plan, make_plan
@@ -190,15 +190,19 @@ class _Watched:
         if name in _ARGUMENTS:  # an engine has no "trial": its grip scene has
             return self.watching(name, attribute)
         if name == "grip_scene":
-            return lambda setup: _WatchedScene(attribute(setup), self, setup.box.size)
+            return lambda setup: _WatchedScene(attribute(setup), self, setup)
         return attribute
 
-    def watching(self, name: str, operation: Callable, box=None) -> Callable:
-        """operation, counted, and recorded as a clip. box: the size of the grip box, for a trial."""
+    def watching(self, name: str, operation: Callable, box=None, scene: dict | None = None) -> Callable:
+        """operation, counted, and recorded as a clip.
+
+        For a trial: box is the size of the grip box, and scene the grip scene's times, which the
+        clip's arguments also get, so a player knows when the pull starts and how it shakes.
+        """
 
         def watched(*args, **kwargs):
             if self._recorder is not None:
-                arguments = dict(zip(_ARGUMENTS[name], args, strict=False)) | kwargs
+                arguments = dict(zip(_ARGUMENTS[name], args, strict=False)) | kwargs | (scene or {})
                 self._recorder.start(self._check_id, name, arguments, box)
             try:
                 outcome = operation(*args, **kwargs)
@@ -214,9 +218,10 @@ class _Watched:
 class _WatchedScene:
     """A grip scene, with each trial counted and recorded."""
 
-    def __init__(self, scene, watcher: _Watched, box: tuple[float, float, float]):
+    def __init__(self, scene, watcher: _Watched, setup: GripSetup):
         self._scene = scene
-        self.trial = watcher.watching("trial", scene.trial, box)
+        times = {"close_seconds": setup.close_seconds, "pull_seconds": setup.pull_seconds, "shake_hz": setup.shake_hz}
+        self.trial = watcher.watching("trial", scene.trial, setup.box.size, times)
 
     def __getattr__(self, name: str):
         return getattr(self._scene, name)

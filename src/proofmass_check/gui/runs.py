@@ -18,10 +18,12 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from proofmass_check import replay
 from proofmass_check.checks import TITLES
 
 SCHEMA_VERSION = 1  # the version of results.json this GUI reads
 MAX_BYTES = 2_000_000  # a results file has a few kB to about 100 kB, so a larger JSON file is something else
+MAX_REPLAY_BYTES = 512_000_000  # a replay of the G2 has about 18 MB (docs/gui.md, section 5.5)
 MAX_FILES = 5000  # the most JSON files read in one folder, so that opening a large folder by mistake ends
 SETTINGS_NOTE = "settings differ from the spec"  # runner.py starts each note about a changed setting so
 SPEC_URL = "https://github.com/proofmass/proofmass-check/blob/v{version}/docs/spec.md"
@@ -196,7 +198,39 @@ def details(run: Run) -> dict:
         "notes": list(data.get("notes", [])),
         "checks": checks,
         "measurements": sorted(measured, key=_worst_first),
+        "replay": replay_path(run) is not None,
     }
+
+
+def replay_path(run: Run) -> Path | None:
+    """The replay file that results.json names, when it is there (docs/gui.md, section 5.5).
+
+    The name must be a file name only, in the folder of the results file: a name with a folder or ".."
+    in it is not read.
+    """
+    named = run.data.get("replay")
+    name = named.get("file") if isinstance(named, dict) else None
+    if not isinstance(name, str) or name in ("", ".", "..") or "/" in name or "\\" in name or Path(name).name != name:
+        return None
+    path = run.path.parent / name
+    return path if path.is_file() else None
+
+
+def replay_bytes(run: Run) -> bytes:
+    """The replay of a run, as its file holds it.
+
+    LookupError when the run has none. ValueError when the file is too large, is not a replay this
+    version reads, or is from another run: its id is not the one in results.json.
+    """
+    path = replay_path(run)
+    if path is None:
+        raise LookupError("this run has no replay: run it with --replay")
+    if path.stat().st_size > MAX_REPLAY_BYTES:
+        raise ValueError(f"the replay is larger than {MAX_REPLAY_BYTES // 1_000_000} MB")
+    data = path.read_bytes()
+    if replay.header(data).get("id") != run.data["replay"].get("id"):
+        raise ValueError(f"{path.name} is from another run: its id is not the one in the results file")
+    return data
 
 
 def _worst_first(m: dict):

@@ -181,7 +181,8 @@ def test_a_replay_changes_no_result(engine, name, request):
     for clip in recorder.clips:
         frames = np.stack(clip.frames)
         times = frames[:, 0]
-        seconds = clip.arguments.get("seconds") or 3.5  # a grip trial: GRIP_HOLD_S after settle_s
+        a = clip.arguments
+        seconds = a["close_seconds"] + a["pull_seconds"] if clip.operation == "trial" else a["seconds"]
         assert times[0] == 0 and np.all(np.diff(times) > 0), clip.check
         assert times[-1] == pytest.approx(seconds, abs=0.02), clip.check  # the state the check measured
         assert 0.025 < np.median(np.diff(times)) < 0.04, clip.check  # about replay.FPS frames per second
