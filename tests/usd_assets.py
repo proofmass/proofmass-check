@@ -18,7 +18,7 @@ def new_stage(path: Path, name: str) -> Usd.Stage:
     return stage
 
 
-def body(stage, path, position, mass, com=None) -> Usd.Prim:
+def body(stage, path, position, mass, com=None, inertia=None) -> Usd.Prim:
     xform = UsdGeom.Xform.Define(stage, path)
     xform.AddTranslateOp().Set(Gf.Vec3d(*position))
     prim = xform.GetPrim()
@@ -27,6 +27,8 @@ def body(stage, path, position, mass, com=None) -> Usd.Prim:
     api.CreateMassAttr(mass)
     if com is not None:
         api.CreateCenterOfMassAttr(Gf.Vec3f(*com))
+    if inertia is not None:
+        api.CreateDiagonalInertiaAttr(Gf.Vec3f(*inertia))
     return prim
 
 

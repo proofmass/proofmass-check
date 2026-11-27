@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from proofmass_check.checks import TITLES
 from proofmass_check.checks.grip import choose_site
+from proofmass_check.checks.inertia import judged_bodies
 from proofmass_check.checks.passive import passive_joints
 from proofmass_check.model import Asset, GripperSite, Joint
 from proofmass_check.rules import Settings
@@ -50,8 +51,7 @@ def make_plan(
         | _drive_skips(driven, limited, speed_limited)
         | _wheel_skips(asset, settings)
     )
-    if not passive:
-        skip["PASSIVE"] = "no joint without a position drive has limits"
+    skip |= _data_skips(asset, passive)
     if site is None:
         why = "; ".join(notes) if notes else "the asset has no gripper site (gripper_maxOpening)"
         skip["GRIP"] = skip["SHAKE"] = why
@@ -130,6 +130,15 @@ def _drop_skip(asset: Asset, has_drives: bool, settings: Settings) -> dict[str, 
     if has_drives:
         return {"DROP": "the asset has position drives, so its joints are checked instead"}
     return {}
+
+
+def _data_skips(asset: Asset, passive) -> dict[str, str]:
+    skip = {}
+    if not judged_bodies(asset):
+        skip["INERTIA"] = "no body has its mass, its inertia (diagonalInertia) and colliders in the USD"
+    if not passive:
+        skip["PASSIVE"] = "no joint without a position drive has limits"
+    return skip
 
 
 def _drive_skips(driven, limited, speed_limited) -> dict[str, str]:

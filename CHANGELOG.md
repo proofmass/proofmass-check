@@ -8,6 +8,18 @@ and the spec version.
 
 ## [Unreleased]
 
+### Added
+
+- INERTIA (spec 0.5): each body whose USD gives its mass and inertia must have an inertia within
+  `INERTIA_MIN_RATIO` = 0.01 and `INERTIA_MAX_RATIO` = 100 of that of its mass spread over its
+  collider points (the traces). It reads the file and runs nothing, so it gives the same result in
+  every engine, and runs even when LOAD fails. Isaac Sim's Franka Panda gives each link about
+  1e-6 kg m² for 2 to 3 kg (7e-5 to 1.3e-4 of the reference), and its joint1 ran 75 deg past a
+  target in PhysX; TurtleBot3 gives its 5 g caster 0.001 kg m² (870 times). 66 bodies of 13 other
+  assets are within 0.28 and 1.32. The reader reads `diagonalInertia`. A new check ID in
+  `results.schema.json`, and a new column in the GUI and the HTML report.
+  The run page's table of measurements is now called Measurements: it lists bodies too.
+
 ### Changed
 
 - Spec 0.5: an asset with a position drive that is neither fixed to the world nor a wheeled robot is

@@ -9,7 +9,7 @@ const TOKEN = new URLSearchParams(location.search).get('token') || '';
 // A margin above this is "close": it passes, but a small change can make it fail. It is a display
 // setting of the GUI, not a rule of the spec, and it never changes a verdict (docs/gui.md, 6.4).
 const CLOSE = 0.8;
-const ORDER = ['LOAD', 'DROP', 'HOLD', 'TRACK', 'LIMIT', 'STABLE', 'SPEED', 'PASSIVE', 'GRIP', 'SHAKE',
+const ORDER = ['LOAD', 'INERTIA', 'DROP', 'HOLD', 'TRACK', 'LIMIT', 'STABLE', 'SPEED', 'PASSIVE', 'GRIP', 'SHAKE',
   'STAND', 'DRIVE', 'TURN', 'STEER'];
 const WHEELED = ['STAND', 'DRIVE', 'TURN', 'STEER'];
 const SIGN = {PASS: '✓', FAIL: '✕', 'N/A': '·'};
@@ -433,7 +433,7 @@ async function runView(folderId, runId) {
   ];
   const checks = [...d.checks.filter(c => c.verdict !== 'N/A'), ...d.checks.filter(c => c.verdict === 'N/A')];
   const measured = d.measurements.length
-    ? [h('h2', {}, 'Joints', h('span', {class: 'muted'}, 'every measurement, the ones that failed first, then by margin')),
+    ? [h('h2', {}, 'Measurements', h('span', {class: 'muted'}, 'of each joint, body and site, the ones that failed first, then by margin')),
       h('div', {class: 'scroll'}, h('table', {},
         h('thead', {}, h('tr', {}, ['Subject', 'Check', 'Case', 'Quantity'].map(t => h('th', {}, t)),
           h('th', {class: 'num'}, 'Value'), h('th', {class: 'num'}, 'Limit'), h('th', {}, 'Margin'), h('th', {class: 'c'}, ''))),

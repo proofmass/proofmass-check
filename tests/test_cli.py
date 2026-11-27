@@ -12,7 +12,7 @@ from proofmass_check import cli, engines
 def test_list_checks(capsys):
     assert cli.main(["list-checks"]) == cli.PASSED
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0].startswith("LOAD") and len(lines) == 14
+    assert lines[0].startswith("LOAD") and len(lines) == 15
 
 
 def test_a_missing_file(tmp_path, capsys):

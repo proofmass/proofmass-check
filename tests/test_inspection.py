@@ -60,7 +60,7 @@ def test_the_plan_depends_on_the_engine(tmp_path):
 
 
 def test_what_each_engine_supports(prop, arm):
-    assert supported("physx", prop) == {"LOAD", "DROP", "PASSIVE"}  # no PhysicsArticulationRootAPI
+    assert supported("physx", prop) == {"LOAD", "INERTIA", "DROP", "PASSIVE"}  # no PhysicsArticulationRootAPI
     assert "HOLD" in supported("physx", arm) and "SPEED" in supported("physx", arm)
     assert not {"SPEED", "STAND", "DRIVE", "TURN", "STEER"} & supported("newton", arm)
 

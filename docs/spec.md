@@ -1,7 +1,8 @@
 # proofmass-check specification
 
 Version 0.5 (draft). Version 0.5 holds the base of an asset with position drives that is not fixed
-to the world (section 3), and leaves out a D6 joint to the world with every axis free (section 2).
+to the world (section 3), leaves out a D6 joint to the world with every axis free (section 2), and
+adds INERTIA (section 4.1).
 Version 0.4 puts no floor under an asset fixed to the world (section 1), and gives DRIVE one angle
 for its heading and its sideways drift (section 4.2).
 Version 0.3 reads the drive of a joint from an `MjcActuator` in Newton (section 2). Version 0.2
@@ -76,6 +77,7 @@ Missing data is not a failure of a check. A check that needs it reports `N/A`.
 | Check | Runs when | Else `N/A`, because |
 |---|---|---|
 | LOAD | always | |
+| INERTIA | a body has its mass, its inertia (`diagonalInertia`, not 0) and colliders in the USD | no such body |
 | DROP | the run has a floor, the asset is not fixed to the world, is not a wheeled robot, and has no position drives | the asset is held, STAND drops it, or its joints are checked instead |
 | HOLD | a joint has a position drive (stiffness > 0) | no joint has a position drive |
 | TRACK, LIMIT, STABLE | a joint with a position drive has both limits | no driven joint has limits |
@@ -117,6 +119,27 @@ damping-only drive is a wheel there, so PASSIVE does not push it.
   and the engine's total mass is within `MASS_TOL` = 0.01 of the USD's (only when the USD gives
   every mass).
 - **Report:** joint count by drive kind, both masses, and the joints that do not match.
+
+### INERTIA: each body's inertia fits its mass and the size of its colliders
+
+- **Why:** an inertia far too small or too large is a wrong number, as when a unit is wrong, and
+  the engines do not refuse it. Isaac Sim's Franka Panda gives each link about 1e-6 kg m² for
+  2 to 3 kg, as if its mass sat within 0.6 mm of one point. A drive then cannot stop the joint
+  that turns the upright arm about its own axis: in PhysX, its joint1 ran 75 deg past a target and
+  78 deg past a limit. With the inertia computed from its colliders, it reaches its targets.
+  Isaac Sim's TurtleBot3 gives its 5 g caster 0.001 kg m², a placeholder of a URDF, 870 times
+  the reference; fixed to the base, it adds about half to the robot's inertia about Z.
+- **Setup:** none: INERTIA reads the file, and gives the same result in every engine. It runs
+  even when LOAD fails.
+- **Reference:** the body's mass spread equally over its collider points (hull points, cylinder
+  rims, sphere points), the trace of its inertia about their centroid. The points are on the
+  colliders' surface, so this is up to about three times the inertia of the solid colliders.
+- **Rule:** for each such body, the trace of its principal moments over the reference is at least
+  `INERTIA_MIN_RATIO` = 0.01 and at most `INERTIA_MAX_RATIO` = 100.0. A body's mass can sit near
+  its middle or near its rim, so the range is wide. In 66 bodies of 13 assets that come with Isaac
+  Sim and of ProofmassEngine, the ratio is 0.28 to 1.32; in Franka Panda's 11 bodies, 7e-5 to
+  1.3e-4.
+- **Report:** the ratio of each body.
 
 ### DROP: dropped, it comes to rest on the floor
 
@@ -299,6 +322,7 @@ site, or empty for the whole asset), a case, a quantity, a value and a limit in 
 | Check | Subject and case | Quantity: limit |
 |---|---|---|
 | LOAD | asset | joints the engine did not build: 0; engine joints not in the USD: 0; mass difference (a fraction of the USD mass): `MASS_TOL`, only when the USD gives every mass |
+| INERTIA | body | inertia over its colliders' inertia: at least `INERTIA_MIN_RATIO`, at most `INERTIA_MAX_RATIO` |
 | DROP | asset | final speed: `REST_SPEED`; lowest collider from the floor (signed): `FLOOR_TOL`; tilt: none |
 | HOLD | joint | error: one tolerance |
 | TRACK | joint, `25%` and `75%` | error: one tolerance |

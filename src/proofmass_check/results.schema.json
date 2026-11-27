@@ -45,7 +45,7 @@
     "engine_cannot_run": {
       "type": "array",
       "description": "Checks that apply to the asset but that the engine cannot run yet: they are N/A, and a PASS does not cover them (docs/spec.md, section 5). Older results do not have it.",
-      "items": {"enum": ["LOAD", "DROP", "HOLD", "TRACK", "LIMIT", "STABLE", "SPEED", "PASSIVE", "GRIP", "SHAKE",
+      "items": {"enum": ["LOAD", "INERTIA", "DROP", "HOLD", "TRACK", "LIMIT", "STABLE", "SPEED", "PASSIVE", "GRIP", "SHAKE",
                          "STAND", "DRIVE", "TURN", "STEER"]}
     },
     "gripper_without_site": {
@@ -64,7 +64,7 @@
         "type": "object",
         "required": ["id", "title", "verdict", "detail"],
         "properties": {
-          "id": {"enum": ["LOAD", "DROP", "HOLD", "TRACK", "LIMIT", "STABLE", "SPEED", "PASSIVE", "GRIP", "SHAKE",
+          "id": {"enum": ["LOAD", "INERTIA", "DROP", "HOLD", "TRACK", "LIMIT", "STABLE", "SPEED", "PASSIVE", "GRIP", "SHAKE",
                          "STAND", "DRIVE", "TURN", "STEER"]},
           "title": {"type": "string"},
           "verdict": {"enum": ["PASS", "FAIL", "N/A"]},

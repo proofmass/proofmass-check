@@ -19,6 +19,7 @@ asset does when physics runs.
 | ID | What it checks | Runs on |
 |---|---|---|
 | `LOAD` | The engine builds every joint and the same total mass as the USD | every asset |
+| `INERTIA` | Each body's inertia fits its mass and the size of its colliders; it reads the file and runs nothing | bodies whose USD gives their mass and inertia |
 | `DROP` | Dropped from 10 cm, it comes to rest on the floor | assets that are not fixed to the world and have no position drives |
 | `HOLD` | Drives hold the rest pose under gravity | joints with a position drive |
 | `TRACK` | Drives reach 25 % and 75 % of their range | driven joints with limits |
@@ -42,7 +43,7 @@ A wheeled robot needs a short description of its wheels in the USD: see
 
 | Engine | Status | Runs in | Not yet |
 |---|---|---|---|
-| `physx` | reference engine | Isaac Sim 6.1's Python | joints between free rigid bodies get LOAD, DROP and PASSIVE only |
+| `physx` | reference engine | Isaac Sim 6.1's Python | joints between free rigid bodies get LOAD, INERTIA, DROP and PASSIVE only |
 | `newton` | experimental, needs an NVIDIA GPU; results can differ from run to run ([spec, section 5](docs/spec.md#5-engines)) | a Python with `newton[sim,importers]` | SPEED; STAND, DRIVE, TURN, STEER; the single axes of a D6 joint; PhysX joint friction (`physxJoint:jointFriction`), which a note names |
 
 proofmass-check runs in the Python environment that has the engine. It does not look for other

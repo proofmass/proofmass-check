@@ -202,6 +202,17 @@ def test_a_d6_joint_to_the_world_with_every_axis_free_is_left_out(loose_arm, tmp
     assert limited.free_roots == () and len([j for j in limited.joints if j.d6 == "rootJoint"]) == 5
 
 
+def test_inertia_from_the_file(tmp_path):
+    """diagonalInertia, in kg m^2; (0, 0, 0) leaves it to the engine."""
+    stage = usd_assets.new_stage(tmp_path / "inertia.usda", "r")
+    usd_assets.body(stage, "/r/given", (0, 0, 0), 2.0, inertia=(0.01, 0.02, 0.03))
+    usd_assets.body(stage, "/r/computed", (1, 0, 0), 2.0, inertia=(0, 0, 0))
+    stage.Save()
+    asset = read_asset(tmp_path / "inertia.usda")
+    assert asset.bodies["/r/given"].inertia == pytest.approx([0.01, 0.02, 0.03])
+    assert asset.bodies["/r/computed"].inertia is None
+
+
 def test_files_that_are_not_assets(tmp_path):
     empty = Usd.Stage.CreateNew(str(tmp_path / "empty.usda"))
     empty.Save()
