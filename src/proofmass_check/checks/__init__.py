@@ -16,6 +16,7 @@ Verdict = Literal["PASS", "FAIL", "N/A"]
 # Every check, in the order a run reports them, with a one-line title.
 TITLES = {
     "LOAD": "the engine builds the asset as the USD describes it",
+    "INERTIA": "each body's inertia fits its mass and the size of its colliders",
     "DROP": f"dropped from {rules.DROP_HEIGHT * 100:g} cm, comes to rest on the floor",
     "HOLD": "drives hold the rest pose under gravity",
     "TRACK": f"each drive reaches {rules.TRACK_AT[0]:.0%} and {rules.TRACK_AT[1]:.0%} of its range",

@@ -19,7 +19,7 @@ def test_a_full_run_on_the_gripper(gripper, tmp_path):
     run = run_checks(IdealEngine(), gripper, Settings())
     assert run.passed
     assert [(r.id, r.verdict) for r in run.results] == [
-        ("LOAD", "PASS"), ("DROP", "N/A"), ("HOLD", "PASS"), ("TRACK", "PASS"), ("LIMIT", "PASS"),
+        ("LOAD", "PASS"), ("INERTIA", "N/A"), ("DROP", "N/A"), ("HOLD", "PASS"), ("TRACK", "PASS"), ("LIMIT", "PASS"),
         ("STABLE", "PASS"), ("SPEED", "N/A"), ("PASSIVE", "N/A"), ("GRIP", "PASS"), ("SHAKE", "PASS"),
         ("STAND", "N/A"), ("DRIVE", "N/A"), ("TURN", "N/A"), ("STEER", "N/A"),
     ]  # fmt: skip
@@ -40,8 +40,9 @@ def test_other_checks_wait_for_load(arm):
 
     run = run_checks(DropsAJoint(), arm, Settings())
     assert not run.passed
-    assert {r.id: r.verdict for r in run.results}["HOLD"] == "N/A"
-    assert run.results[2].detail == "the engine did not build the asset as the USD describes it (LOAD)"
+    by_id = {r.id: r for r in run.results}
+    assert by_id["HOLD"].verdict == "N/A"
+    assert by_id["HOLD"].detail == "the engine did not build the asset as the USD describes it (LOAD)"
 
 
 def test_only_an_engine_that_reads_mjc_actuators_drives_a_joint_with_one(actuated_arm):

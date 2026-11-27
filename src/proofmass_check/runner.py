@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from proofmass_check.checks import TITLES, CheckResult, not_applicable
 from proofmass_check.checks.drop import drop
 from proofmass_check.checks.grip import grip_and_shake
+from proofmass_check.checks.inertia import inertia
 from proofmass_check.checks.joints import hold, limit, stable, track
 from proofmass_check.checks.load import built, load, with_engine_masses
 from proofmass_check.checks.passive import passive
@@ -19,6 +20,8 @@ from proofmass_check.geometry import run_floor
 from proofmass_check.model import Asset
 from proofmass_check.plan import Plan, make_plan
 from proofmass_check.rules import BASE_LIFT, TRACK_AT, Settings
+
+STATIC = ("INERTIA",)  # checks that read the file and run nothing
 
 
 @dataclass(frozen=True)
@@ -60,8 +63,14 @@ def run_checks(engine: Engine, asset: Asset, settings: Settings, events: Callabl
     emit("result", id="LOAD", verdict=results["LOAD"].verdict)
     plan = make_plan(asset, engine.name, engine.supported, settings, outcome.not_addressable)
     not_built = "the engine did not build the asset as the USD describes it (LOAD)"
-    runs = [c for c in TITLES if c != "LOAD" and plan.runs(c)] if built(outcome) else []
+    # INERTIA reads the file and runs nothing, so it runs whatever LOAD finds.
+    static = [c for c in STATIC if plan.runs(c)]
+    runs = [c for c in TITLES if c != "LOAD" and plan.runs(c)] if built(outcome) else static
     emit("plan", runs=runs, skip={c: plan.skip.get(c, not_built) for c in TITLES if c != "LOAD" and c not in runs})
+    for check_id in static:
+        emit("check", id=check_id, total=None)
+        results[check_id] = inertia(asset)  # the file's masses, not the engine's
+        emit("result", id=check_id, verdict=results[check_id].verdict)
     if built(outcome):
         counted = _Counted(engine, emit) if events else None
         results |= _run_planned(counted or engine, with_engine_masses(asset, outcome), plan, settings, floor, emit)

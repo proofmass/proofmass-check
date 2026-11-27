@@ -231,7 +231,7 @@ without starting an engine. `--out FILE` writes the JSON to a file.
 - **The plan without an engine:** the plan needs the engine's `supported` set, and
   `engines/physx.py` imports isaacsim at the top. So what depends only on the asset is in
   `engines/capabilities.py`, which imports no engine, and the engines take it from there: PhysX
-  runs only LOAD, DROP and PASSIVE on an asset without PhysicsArticulationRootAPI, and Newton does
+  runs only LOAD, INERTIA, DROP and PASSIVE on an asset without PhysicsArticulationRootAPI, and Newton does
   not run SPEED, STAND, DRIVE, TURN and STEER. The variant sets each engine reads, and whether it
   reads MjcActuator, are there too.
 - **In the GUI:** the server runs inspect as a process of its own, never in its own process: in

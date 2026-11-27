@@ -66,6 +66,7 @@ class Body:
     hulls: tuple[Hull, ...] = ()
     cylinders: tuple[Cylinder, ...] = ()
     spheres: tuple[Sphere, ...] = ()
+    inertia: np.ndarray | None = None  # principal moments, kg m^2, or None when the USD leaves them to the engine
 
     @property
     def colliders(self) -> int:

@@ -27,6 +27,10 @@ FLOOR_BELOW = 0.001  # the floor is this far below the lowest collider in the fi
 # LOAD
 MASS_TOL = 0.01  # the engine's total mass may differ from the USD's by this fraction
 
+# INERTIA: a body's inertia, over that of its mass spread on its collider points (traces), is within these
+INERTIA_MIN_RATIO = 0.01
+INERTIA_MAX_RATIO = 100.0
+
 # DROP
 DROP_HEIGHT = 0.1  # the asset is lifted this far, then let go
 DROP_SECONDS = 3.0

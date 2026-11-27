@@ -193,13 +193,16 @@ def _read_body(prim: Usd.Prim, cache: UsdGeom.XformCache) -> Body:
     world = cache.GetLocalToWorldTransform(prim)
     pose = world.RemoveScaleShear()
     to_body = pose.GetInverse()
-    mass, com = None, np.zeros(3)
+    mass, com, inertia = None, np.zeros(3), None
     if prim.HasAPI(UsdPhysics.MassAPI):
         api = UsdPhysics.MassAPI(prim)
         mass = api.GetMassAttr().Get() or None  # 0 means "let the engine compute it"
         given = api.GetCenterOfMassAttr().Get()
         if given is not None and all(map(math.isfinite, given)):  # unset reads as -inf
             com = _points(world * to_body, [given])[0]
+        diagonal = api.GetDiagonalInertiaAttr().Get()
+        if diagonal is not None and any(v > 0 for v in diagonal):  # (0, 0, 0) means "let the engine compute it"
+            inertia = np.array(diagonal, float)
     hulls, cylinders, spheres = _read_colliders(prim, cache, to_body)
     return Body(
         path=str(prim.GetPath()),
@@ -211,6 +214,7 @@ def _read_body(prim: Usd.Prim, cache: UsdGeom.XformCache) -> Body:
         hulls=tuple(hulls),
         cylinders=tuple(cylinders),
         spheres=tuple(spheres),
+        inertia=inertia,
     )
 
 

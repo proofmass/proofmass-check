@@ -30,12 +30,12 @@ CAPABILITIES = {
 def supported(engine: str, asset: Asset | None = None) -> frozenset[str]:
     """The checks an engine can run on an asset, as far as the asset alone tells.
 
-    PhysX runs the drive and grip checks only on an articulation. Newton cannot run SPEED or the
-    wheeled checks yet. A Newton model with no free joint also has no DROP, and only the built
-    model tells that, so the Newton engine leaves it out itself.
+    INERTIA reads the file, so every engine runs it. PhysX runs the drive and grip checks only on an
+    articulation. Newton cannot run SPEED or the wheeled checks yet. A Newton model with no free joint
+    also has no DROP, and only the built model tells that, so the Newton engine leaves it out itself.
     """
     if engine == "physx" and asset is not None and not asset.articulated:
-        return frozenset({"LOAD", "DROP", "PASSIVE"})
+        return frozenset({"LOAD", "INERTIA", "DROP", "PASSIVE"})
     if engine == "newton":
         return frozenset(TITLES) - {"SPEED"} - WHEELED
     return frozenset(TITLES)
