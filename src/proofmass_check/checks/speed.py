@@ -11,6 +11,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from proofmass_check import replay
 from proofmass_check.checks import CheckResult, Measurement, judge, text
 from proofmass_check.checks.joints import rest_pose
 from proofmass_check.engines.base import Engine
@@ -45,14 +46,15 @@ def speed(engine: Engine, driven: Sequence[Joint], tested: Sequence[Joint], sett
     """
     rows, measurements = [], []
     for joint in tested:
-        motion = engine.move({**rest_pose(driven), joint.name: far_target(joint)}, SPEED_SECONDS, SPEED_DT)
+        with replay.label(joint.name) as clip:
+            motion = engine.move({**rest_pose(driven), joint.name: far_target(joint)}, SPEED_SECONDS, SPEED_DT)
         speeds = np.abs(motion.speeds[joint.name])
         early = float(np.max(speeds[:SPEED_SKIP_STEPS], initial=0.0))
         peak = float(np.max(speeds[SPEED_SKIP_STEPS:], initial=0.0))
         outside = [j for j in driven if not _inside(j, motion.positions[j.name], settings)]
         inside = motion.finite and not outside
         allowed = joint.max_speed * (1 + SPEED_TOL)
-        ok = inside and peak <= allowed
+        ok = clip.ok = inside and peak <= allowed
         unit = text.si_speed_unit(joint)
         measurements += [
             Measurement(joint.name, "", "highest speed", peak, allowed, unit, peak <= allowed),

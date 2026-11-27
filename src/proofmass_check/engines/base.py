@@ -7,6 +7,11 @@ plan.py and the modules in checks/ do that, the same way for every engine. So an
 few small operations, each starting from the asset's rest pose, and reports what it measured.
 
 All values are in SI units, and joint values are in radians or metres.
+
+For a run with a replay, the runner gives the engine a recorder before open(). Each operation, and
+each trial of a grip scene, then gives it frames (replay.Recorder.frame): one at its start, after
+the reset and any lift; one every replay.FPS-th of a simulated second, to the nearest step; and one
+at its end. Recording only reads the state, so it changes no result.
 """
 
 from collections.abc import Mapping
@@ -16,6 +21,7 @@ from typing import Protocol
 import numpy as np
 
 from proofmass_check.model import Asset, GripperSite
+from proofmass_check.replay import Recorder
 
 
 class EngineBuildError(RuntimeError):
@@ -125,6 +131,7 @@ class Engine(Protocol):
     variant_sets: tuple[str, ...]  # the asset's variant sets this engine reads, preferred first
     supported: frozenset[str]  # the check IDs this engine can run
     reads_mjc_actuators: bool  # a joint without PhysicsDriveAPI takes the drive of its MjcActuator
+    recorder: Recorder | None  # the runner sets it before open(): a Recorder for a run with a replay, or None
 
     def version(self) -> Mapping[str, str]:
         """The versions that affect results, for example {"isaacsim": "6.1.0"}."""

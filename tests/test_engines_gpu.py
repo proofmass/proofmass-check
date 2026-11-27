@@ -30,11 +30,11 @@ def engine(request):
     return started
 
 
-def verdicts(engine, asset):
+def verdicts(engine, asset, recorder=None):
     from proofmass_check.rules import Settings
     from proofmass_check.runner import run_checks
 
-    run = run_checks(engine, asset, Settings())
+    run = run_checks(engine, asset, Settings(), recorder=recorder)
     return {r.id: (r.verdict, r.detail) for r in run.results}
 
 
@@ -157,3 +157,36 @@ def test_an_asset_after_another_gives_the_same_results(engine, arm, prop):
     if engine.name == "newton":
         first, again = ({k: v for k, (v, _) in r.items()} for r in (first, again))
     assert again == first
+
+
+@pytest.mark.parametrize("name", ["prop", "arm", "cabinet", "gripper", "rover", "loose_arm"])
+def test_a_replay_changes_no_result(engine, name, request):
+    """Recording only reads the state (docs/gui.md, section 5.5). In Newton, numbers can differ from run to run,
+    so there only the verdicts must match.
+    """
+    import numpy as np
+
+    from proofmass_check import replay
+    from proofmass_check.rules import DROP_HEIGHT
+    from proofmass_check.runner import STATIC
+
+    asset = request.getfixturevalue(name)
+    recorder = replay.Recorder(asset.bodies)
+    without, recorded = verdicts(engine, asset), verdicts(engine, asset, recorder)
+    if engine.name == "newton":
+        without, recorded = ({k: v for k, (v, _) in r.items()} for r in (without, recorded))
+    assert recorded == without
+    ran = {c for c, v in recorded.items() if (v if engine.name == "newton" else v[0]) != "N/A"} - {"LOAD", *STATIC}
+    assert {c.check for c in recorder.clips} == ran
+    for clip in recorder.clips:
+        frames = np.stack(clip.frames)
+        times = frames[:, 0]
+        seconds = clip.arguments.get("seconds") or 3.5  # a grip trial: GRIP_HOLD_S after settle_s
+        assert times[0] == 0 and np.all(np.diff(times) > 0), clip.check
+        assert times[-1] == pytest.approx(seconds, abs=0.02), clip.check  # the state the check measured
+        assert 0.025 < np.median(np.diff(times)) < 0.04, clip.check  # about replay.FPS frames per second
+        assert np.isfinite(frames).all(), clip.check
+    if name == "prop":  # the first frame is after the lift
+        (drop,) = recorder.clips
+        z = drop.frames[0][3]
+        assert z == pytest.approx(asset.bodies["/unit_box/box"].pose[2, 3] + DROP_HEIGHT, abs=1e-3)

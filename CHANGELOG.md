@@ -19,6 +19,15 @@ and the spec version.
   assets are within 0.28 and 1.32. The reader reads `diagonalInertia`. A new check ID in
   `results.schema.json`, and a new column in the GUI and the HTML report.
   The run page's table of measurements is now called Measurements: it lists bodies too.
+- `proofmass-check run --replay`: also writes `replay.bin` next to `results.json`, with the pose of
+  every body about 30 times per simulated second in each engine operation of each check: a settle,
+  a move, a push, a drop, a drive, or a trial of the grip scene, with the grip box. Each clip
+  carries the check, subject and case of the measurement it gives, so the GUI can play the clip of
+  a measurement (docs/gui.md, section 5.5; the player is not built yet). `results.json` gets an
+  optional field `replay` with the file's name and an id that the file also carries. Recording only
+  reads the engine's state: a test runs each check with and without it and compares the results.
+  In Newton, a CUDA graph has 16 steps in place of 50 when the run records. INERTIA and LOAD run no
+  step, so they give no clip.
 
 ### Changed
 

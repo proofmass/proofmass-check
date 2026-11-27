@@ -19,6 +19,7 @@ from proofmass_check.engines.base import Engine
 from proofmass_check.geometry import run_floor
 from proofmass_check.model import Asset
 from proofmass_check.plan import Plan, make_plan
+from proofmass_check.replay import Recorder
 from proofmass_check.rules import BASE_LIFT, TRACK_AT, Settings
 
 STATIC = ("INERTIA",)  # checks that read the file and run nothing
@@ -44,18 +45,24 @@ class Run:
         return all(r.verdict != "FAIL" for r in self.results)
 
 
-def run_checks(engine: Engine, asset: Asset, settings: Settings, events: Callable | None = None) -> Run:
+def run_checks(
+    engine: Engine, asset: Asset, settings: Settings, events: Callable | None = None, recorder: Recorder | None = None
+) -> Run:
     """Run every check in the order of TITLES. The engine must be started and not yet opened.
 
     events, when given, is called as events(name, **fields) for the progress of the run: "check"
     when a check starts, "step" after each engine operation, "result" with each verdict, and "plan"
     once LOAD is done (events.py).
+
+    recorder, when given, gets a clip for each engine operation, with the frames the engine records
+    and the label the check gives (replay.py). It changes no result.
     """
     emit = events or (lambda name, **fields: None)
     start = time.monotonic()
     if engine.reads_mjc_actuators:
         asset = asset.with_mjc_drives()
     floor = run_floor(asset, settings)
+    engine.recorder = recorder
     engine.open(asset, floor, BASE_LIFT if asset.wheeled else 0.0 if asset.held else None)
     emit("check", id="LOAD", total=None)
     outcome = engine.load()
@@ -72,8 +79,8 @@ def run_checks(engine: Engine, asset: Asset, settings: Settings, events: Callabl
         results[check_id] = inertia(asset)  # the file's masses, not the engine's
         emit("result", id=check_id, verdict=results[check_id].verdict)
     if built(outcome):
-        counted = _Counted(engine, emit) if events else None
-        results |= _run_planned(counted or engine, with_engine_masses(asset, outcome), plan, settings, floor, emit)
+        watched = _Watched(engine, emit, recorder) if events or recorder else None
+        results |= _run_planned(watched or engine, with_engine_masses(asset, outcome), plan, settings, floor, emit)
     for check_id in TITLES:
         if check_id not in results:
             results[check_id] = not_applicable(check_id, plan.skip.get(check_id, not_built))
@@ -119,7 +126,7 @@ def _run_planned(engine: Engine, asset: Asset, plan: Plan, settings: Settings, f
     for check_id, step in steps.items():
         if plan.runs(check_id):
             total = _operations(check_id, plan, settings)
-            if isinstance(engine, _Counted):
+            if isinstance(engine, _Watched):
                 engine.start(check_id, total)
             emit("check", id=check_id, total=total)
             for result in step():
@@ -149,16 +156,26 @@ def _operations(check_id: str, plan: Plan, settings: Settings) -> int | None:
     }.get(check_id)
 
 
-class _Counted:
-    """The engine, with each operation it runs counted for the "step" events.
+# The engine operations, and a grip scene's trial, with the names of their arguments as engines/base.py gives them.
+_ARGUMENTS = {
+    "drop": ("height", "seconds"),
+    "settle": ("targets", "seconds"),
+    "move": ("targets", "seconds", "step"),
+    "push": ("joint", "effort", "seconds"),
+    "drive": ("wheels", "steer", "seconds", "lift", "sample"),
+    "trial": ("mass", "direction", "shake"),
+}
+
+
+class _Watched:
+    """The engine, with each operation it runs counted for the "step" events, and recorded as a clip
+    of the replay when the run has a recorder.
 
     The checks get it in place of the engine. Every other attribute is the engine's own.
     """
 
-    OPERATIONS = frozenset({"drop", "settle", "move", "push", "drive"})
-
-    def __init__(self, engine: Engine, emit: Callable):
-        self._engine, self._emit = engine, emit
+    def __init__(self, engine: Engine, emit: Callable, recorder: Recorder | None = None):
+        self._engine, self._emit, self._recorder = engine, emit, recorder
         self._check_id, self._total, self._done = "", None, 0
 
     def start(self, check_id: str, total: int | None) -> None:
@@ -170,31 +187,36 @@ class _Counted:
 
     def __getattr__(self, name: str):
         attribute = getattr(self._engine, name)
-        if name in self.OPERATIONS:
-            return self._counting(attribute)
+        if name in _ARGUMENTS:  # an engine has no "trial": its grip scene has
+            return self.watching(name, attribute)
         if name == "grip_scene":
-            return lambda setup: _CountedScene(attribute(setup), self)
+            return lambda setup: _WatchedScene(attribute(setup), self, setup.box.size)
         return attribute
 
-    def _counting(self, operation: Callable) -> Callable:
-        def counted(*args, **kwargs):
-            outcome = operation(*args, **kwargs)
+    def watching(self, name: str, operation: Callable, box=None) -> Callable:
+        """operation, counted, and recorded as a clip. box: the size of the grip box, for a trial."""
+
+        def watched(*args, **kwargs):
+            if self._recorder is not None:
+                arguments = dict(zip(_ARGUMENTS[name], args, strict=False)) | kwargs
+                self._recorder.start(self._check_id, name, arguments, box)
+            try:
+                outcome = operation(*args, **kwargs)
+            finally:
+                if self._recorder is not None:
+                    self._recorder.end()
             self.step()
             return outcome
 
-        return counted
+        return watched
 
 
-class _CountedScene:
-    """A grip scene, with each trial counted."""
+class _WatchedScene:
+    """A grip scene, with each trial counted and recorded."""
 
-    def __init__(self, scene, counter: _Counted):
-        self._scene, self._counter = scene, counter
-
-    def trial(self, *args, **kwargs):
-        outcome = self._scene.trial(*args, **kwargs)
-        self._counter.step()
-        return outcome
+    def __init__(self, scene, watcher: _Watched, box: tuple[float, float, float]):
+        self._scene = scene
+        self.trial = watcher.watching("trial", scene.trial, box)
 
     def __getattr__(self, name: str):
         return getattr(self._scene, name)

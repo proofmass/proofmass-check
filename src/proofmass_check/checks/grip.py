@@ -11,6 +11,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from proofmass_check import replay
 from proofmass_check.checks import CheckResult, Measurement, judge, not_applicable
 from proofmass_check.engines.base import Engine, GripBox, GripOutcome, GripSetup
 from proofmass_check.geometry import apply, turn
@@ -131,7 +132,10 @@ def grip_and_shake(engine: Engine, asset: Asset, site: GripperSite, settings: Se
     for label, direction in (("out of the fingers", site.forward), ("along the grip line", site.line)):
         best, tried = 0.0, []
         for fraction in GRIP_LOADS:
-            ok, words, _ = held(scene.trial(fraction * payload, direction, shake=False))
+            with replay.label(site.name, label, f"{fraction * payload:g} kg") as clip:
+                outcome = scene.trial(fraction * payload, direction, shake=False)
+            ok, words, _ = held(outcome)
+            clip.ok = ok
             tried.append(f"{fraction * payload:g} kg {words}")
             if not ok:
                 break
@@ -151,7 +155,10 @@ def grip_and_shake(engine: Engine, asset: Asset, site: GripperSite, settings: Se
         )
     detail = f"site {site.name}, payload {payload:g} kg: " + "; ".join(rows)
     grip = judge("GRIP", all(m.ok for m in measurements), detail, measurements)
-    ok, words, slip = held(scene.trial(GRIP_LOAD * payload, site.forward, shake=True))
+    with replay.label(site.name, check="SHAKE") as clip:
+        outcome = scene.trial(GRIP_LOAD * payload, site.forward, shake=True)
+    ok, words, slip = held(outcome)
+    clip.ok = ok
     slipped = Measurement(site.name, "", "slip along the pads", slip, GRIP_SLIP, "m", ok)
     shake = judge("SHAKE", ok, f"{GRIP_LOAD * payload:g} kg at {SHAKE_HZ:g} Hz: {words}", [slipped])
     return [grip, shake]

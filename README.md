@@ -83,6 +83,7 @@ proofmass-check list-checks
 | `--settle S` | seconds a drive gets for a move (spec: 1.5). A run with another value says so in its results |
 | `--out DIR` | where to write `results.json` (default `./proofmass-check-<asset name>`). With several assets, a folder per asset in it |
 | `--events FILE` | write the progress to FILE as JSON Lines, for a program that follows the run |
+| `--replay` | also write `replay.bin` next to `results.json`: the motion of every body in each check ([docs/gui.md, section 5.5](docs/gui.md#55-the-replay)) |
 
 Several assets run in one start of the engine, which saves the start of Isaac Sim for each. The
 exit status is 0 when no check failed, 1 when a check failed, and 2 when the run could not

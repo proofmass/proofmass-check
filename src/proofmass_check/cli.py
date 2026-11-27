@@ -17,7 +17,7 @@ import time
 import traceback
 from pathlib import Path
 
-from proofmass_check import __version__, engines, report
+from proofmass_check import __version__, engines, replay, report
 from proofmass_check.checks import TITLES
 from proofmass_check.events import Events, asset_events
 from proofmass_check.rules import SETTLE_S, SPEC_VERSION, Settings
@@ -58,6 +58,12 @@ def _parser() -> argparse.ArgumentParser:
         "(default: ./proofmass-check-<asset name>)",
     )
     run.add_argument("--events", type=Path, metavar="FILE", help="write the progress to FILE as JSON Lines")
+    run.add_argument(
+        "--replay",
+        action="store_true",
+        help=f"also write {replay.FILE_NAME} next to results.json: the motion of every body in each check, "
+        "for the GUI (docs/gui.md, section 5.5)",
+    )
     run.set_defaults(func=_run)
 
     inspect = sub.add_parser(
@@ -244,18 +250,20 @@ def _run_in(engine, file: Path, args, settings: Settings, out: Path, events) -> 
 
     events("asset")
     started = time.monotonic()
+    recorder = None
     try:
         variants = usd_reader.choose_variants(file, engine.variant_sets, args.variant)
         asset = usd_reader.read_asset(file, variants)
-        run = runner.run_checks(engine, asset, settings, events)
+        recorder = replay.Recorder(asset.bodies) if args.replay else None
+        run = runner.run_checks(engine, asset, settings, events, recorder)
     except (usd_reader.AssetError, engines.EngineBuildError) as e:  # about the asset: its message, no traceback
         print(f"proofmass-check: {e}", file=sys.stderr)
-        return _stopped(file, args.engine, str(e), out, events, started)
+        return _stopped(file, args.engine, str(e), out, events, started, recorder)
     except Exception:  # noqa: BLE001  the user needs results.json with the error, whatever it is
         error = traceback.format_exc()
         print(error, file=sys.stderr)
-        return _stopped(file, args.engine, error[-4000:], out, events, started)
-    path = report.write(report.to_dict(run), out)
+        return _stopped(file, args.engine, error[-4000:], out, events, started, recorder)
+    path = report.write(_with_replay(report.to_dict(run), recorder, out), out)
     for result in run.results:
         print(f"{result.verdict:4} {result.id:8} {result.detail}")
     for note in run.notes:
@@ -266,9 +274,23 @@ def _run_in(engine, file: Path, args, settings: Settings, out: Path, events) -> 
     return PASSED if run.passed else FAILED
 
 
-def _stopped(file: Path, engine: str, error: str, out: Path, events, started: float) -> int:
-    """results.json and the "end" event of a run that stopped with an error."""
-    path = report.write(report.error_dict(file, engine, error), out)
+def _with_replay(data: dict, recorder: replay.Recorder | None, out: Path) -> dict:
+    """results.json's data, with the field that names the replay once replay.bin is written next to it.
+
+    The replay is written first, so results.json never names a file that is not there.
+    """
+    if recorder is None:
+        return data
+    replay.write(recorder, out, data["engine"]["name"], data["asset"]["sha256"])
+    return data | {"replay": {"file": replay.FILE_NAME, "id": recorder.id}}
+
+
+def _stopped(file: Path, engine: str, error: str, out: Path, events, started: float, recorder=None) -> int:
+    """results.json and the "end" event of a run that stopped with an error.
+
+    With a recorder, the clips recorded before the error go to replay.bin.
+    """
+    path = report.write(_with_replay(report.error_dict(file, engine, error), recorder, out), out)
     seconds = round(time.monotonic() - started, 1)
     events("end", passed=False, error=(error.strip().splitlines() or [""])[-1], results=str(path), seconds=seconds)
     return ERROR

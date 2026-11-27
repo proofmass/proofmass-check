@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from proofmass_check import rules
+from proofmass_check import replay, rules
 from proofmass_check.checks import CheckResult, Measurement, judge
 from proofmass_check.engines.base import BaseTrace, Engine
 from proofmass_check.model import Asset, WheeledBase
@@ -182,6 +182,8 @@ def _all_ok(found: list[Measurement]) -> bool:
 def wheeled(engine: Engine, asset: Asset, check_id: str) -> CheckResult:
     sent = commands(asset.wheeled, check_id)
     lift = rules.DROP_HEIGHT if check_id == "STAND" else 0.0
-    trace = engine.drive(sent.wheels, sent.steer, sent.seconds, lift, rules.BASE_SAMPLE_DT)
+    with replay.label() as clip:
+        trace = engine.drive(sent.wheels, sent.steer, sent.seconds, lift, rules.BASE_SAMPLE_DT)
     ok, detail, found = evaluate(asset.wheeled, check_id, sent, axle_path(asset, trace))
+    clip.ok = ok
     return judge(check_id, ok, detail, found)
