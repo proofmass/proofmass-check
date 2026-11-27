@@ -122,6 +122,8 @@ def test_the_labels_of_each_check(gripper, cabinet):
     assert [c.label.subject for c in by_check["HOLD"]] == [""]
     grip = by_check["GRIP"][0]
     assert grip.operation == "trial" and grip.box is not None and grip.label.attempt.endswith(" kg")
+    # A player needs the grip scene's times: the pull starts when the fingers have closed.
+    assert {"close_seconds": 1.5, "pull_seconds": 2.0, "shake_hz": 2.0}.items() <= grip.arguments.items()
     assert {c.label.case for c in by_check["GRIP"]} == {"out of the fingers", "along the grip line"}
     (shake,) = by_check["SHAKE"]
     assert shake.label.case == "" and shake.arguments["shake"] is True and shake.label.ok is True

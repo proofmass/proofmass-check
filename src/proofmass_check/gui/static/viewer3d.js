@@ -3,6 +3,7 @@
 'use strict';
 /* A 3D view of an asset as the engine collides it: its colliders, joints and gripper sites, in the
    file pose (docs/gui.md, section 6.6). It takes the output of `proofmass-check inspect --geometry`.
+   A replay moves each body to the pose of a frame, with show() (section 6.11).
 
    No library: the triangles are sorted from far to near and filled on a 2D canvas. That is enough
    for colliders, which are convex hulls of a few dozen faces. Z is up, as in the spec. */
@@ -23,11 +24,20 @@ function makeViewer(canvas, data, marks, onPick) {
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const unit = a => { const l = Math.hypot(...a) || 1; return scale(a, 1 / l); };
   const apply = (m, p) => [0, 1, 2].map(i => m[i][0] * p[0] + m[i][1] * p[1] + m[i][2] * p[2] + m[i][3]);
+  const rotate = (m, v) => [0, 1, 2].map(i => m[i][0] * v[0] + m[i][1] * v[1] + m[i][2] * v[2]);
+  // Rigid transforms as rows [r0 r1 r2 t]: the product of two, and the inverse of one.
+  const times = (a, b) => [0, 1, 2].map(i => [0, 1, 2, 3].map(k =>
+    a[i][0] * b[0][k] + a[i][1] * b[1][k] + a[i][2] * b[2][k] + (k === 3 ? a[i][3] : 0)));
+  const inverse = m => {
+    const r = [0, 1, 2].map(i => [m[0][i], m[1][i], m[2][i]]);
+    const t = [m[0][3], m[1][3], m[2][3]];
+    return r.map(row => [...row, -dot(row, t)]);
+  };
   // v turned by angle (rad) about the unit axis k, by the right-hand rule, as a joint turns (Rodrigues).
   const turn = (v, k, angle) => add(add(scale(v, Math.cos(angle)), scale(cross(k, v), Math.sin(angle))),
     scale(k, dot(k, v) * (1 - Math.cos(angle))));
 
-  // The triangles of every collider, in the world, with the body they belong to. Each collider is
+  // The triangles of every collider, in the frame of the body they belong to. Each collider is
   // convex, so each triangle's normal is turned to point away from the collider's centre. A face
   // turned away from the camera is then left out, and the near faces of one collider never hide
   // behind its far ones, whatever order the file gives.
@@ -46,58 +56,95 @@ function makeViewer(canvas, data, marks, onPick) {
   const drawHulls = hullTriangles <= MAX_TRIANGLES;
   for (const body of drawHulls ? data.bodies : []) {
     for (const hull of body.hulls || []) {
-      const points = hull.points.map(p => apply(body.pose, p));
+      const points = hull.points;
       const centre = scale(points.reduce(add, [0, 0, 0]), 1 / Math.max(points.length, 1));
       for (const [i, j, k] of hull.triangles) outward([points[i], points[j], points[k]], centre, body.path);
     }
     for (const c of body.cylinders || []) {
-      // A prism of 16 sides along the cylinder's axis, in the body's frame, then in the world.
+      // A prism of 16 sides along the cylinder's axis.
       const axis = unit(c.axis);
       const u = unit(Math.abs(axis[2]) < 0.9 ? cross(axis, [0, 0, 1]) : cross(axis, [1, 0, 0]));
       const v = cross(axis, u);
       const ring = (h) => Array.from({length: 16}, (_, i) => {
         const a = (i / 16) * 2 * Math.PI;
-        return apply(body.pose, add(add(c.centre, scale(axis, h)), add(scale(u, c.radius * Math.cos(a)), scale(v, c.radius * Math.sin(a)))));
+        return add(add(c.centre, scale(axis, h)), add(scale(u, c.radius * Math.cos(a)), scale(v, c.radius * Math.sin(a))));
       });
       const low = ring(-c.height / 2);
       const high = ring(c.height / 2);
-      const ends = [apply(body.pose, add(c.centre, scale(axis, -c.height / 2))), apply(body.pose, add(c.centre, scale(axis, c.height / 2)))];
-      const centre = apply(body.pose, c.centre);
+      const ends = [add(c.centre, scale(axis, -c.height / 2)), add(c.centre, scale(axis, c.height / 2))];
       for (let i = 0; i < 16; i++) {
         const j = (i + 1) % 16;
         for (const p of [[low[i], low[j], high[j]], [low[i], high[j], high[i]], [ends[0], low[j], low[i]], [ends[1], high[i], high[j]]]) {
-          outward(p, centre, body.path);
+          outward(p, c.centre, body.path);
         }
       }
     }
   }
   for (const body of data.bodies) {
     for (const s of body.spheres || []) {
-      // A sphere of 8 bands and 12 sectors, in the body's frame, then in the world.
-      const at = (lat, lon) => apply(body.pose, add(s.centre, scale(
-        [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)], s.radius)));
-      const centre = apply(body.pose, s.centre);
+      // A sphere of 8 bands and 12 sectors.
+      const at = (lat, lon) => add(s.centre, scale([Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)], s.radius));
       for (let i = 0; i < 8; i++) {
         const a0 = -Math.PI / 2 + (i / 8) * Math.PI, a1 = -Math.PI / 2 + ((i + 1) / 8) * Math.PI;
         for (let k = 0; k < 12; k++) {
           const b0 = (k / 12) * 2 * Math.PI, b1 = ((k + 1) / 12) * 2 * Math.PI;
           for (const p of [[at(a0, b0), at(a0, b1), at(a1, b1)], [at(a0, b0), at(a1, b1), at(a1, b0)]]) {
-            outward(p, centre, body.path);
+            outward(p, s.centre, body.path);
           }
         }
       }
     }
   }
   const joints = data.joints.filter(j => j.pivot && j.direction && j.kind !== 'fixed');
+  // Each body's colliders as the 8 corners of their box in the body's frame, for fit().
+  const boxes = new Map();
+  for (const t of triangles) {
+    const [low, high] = boxes.get(t.body) || [[Infinity, Infinity, Infinity], [-Infinity, -Infinity, -Infinity]];
+    for (const p of t.p) for (let i = 0; i < 3; i++) { low[i] = Math.min(low[i], p[i]); high[i] = Math.max(high[i], p[i]); }
+    boxes.set(t.body, [low, high]);
+  }
+  const corners = new Map([...boxes].map(([body, [low, high]]) =>
+    [body, Array.from({length: 8}, (_, n) => [0, 1, 2].map(i => (n & (1 << i) ? high[i] : low[i])))]));
 
-  // The scene's size, for the camera and the length of the joint axes.
-  const points = triangles.flatMap(t => t.p).concat(joints.map(j => j.pivot));
+  // Where each body is: in the file pose, or at the frame of a replay (show()). The triangles in the
+  // world are made again only when the poses change, not for every turn of the camera.
+  const filePose = new Map(data.bodies.map(b => [b.path, b.pose]));
+  const fileInverse = new Map(data.bodies.map(b => [b.path, inverse(b.pose)]));
+  let poses = null;  // Map: body path → pose, during a replay
+  let overlay = null;  // what a clip of a replay adds (show())
+  let world = null;
+  const poseOf = path => (poses && poses.get(path)) || filePose.get(path);
+  const placed = () => {
+    world = world || triangles.map(t => { const m = poseOf(t.body); return {p: t.p.map(q => apply(m, q)), n: rotate(m, t.n), body: t.body}; });
+    return world;
+  };
+  // How a body moved from its file pose, for the marks that move with it: a joint with its first
+  // body (body0), a gripper site with its body. null when it did not move.
+  const moved = path => (poses && path && poses.has(path) && fileInverse.has(path) ? times(poses.get(path), fileInverse.get(path)) : null);
+  const placeJoint = j => {
+    const m = moved(j.body0);
+    return m ? {...j, pivot: apply(m, j.pivot), direction: rotate(m, j.direction), carried_centre: j.carried_centre && apply(m, j.carried_centre)} : j;
+  };
+  const placeSite = s => {
+    const m = moved(s.body);
+    if (!m) return s;
+    const box = s.grip_box && {...s.grip_box, centre: apply(m, s.grip_box.centre),
+      rotation: [0, 1, 2].map(i => [0, 1, 2].map(k => m[i][0] * s.grip_box.rotation[0][k] + m[i][1] * s.grip_box.rotation[1][k] + m[i][2] * s.grip_box.rotation[2][k]))};
+    return {...s, centre: apply(m, s.centre), closing: rotate(m, s.closing), grip_box: box};
+  };
+
+  // The asset's size, for the length of the marks, from the file pose. The camera and the floor grid
+  // hold `view`, which a replay can widen to hold all of a clip (fit()).
+  const points = placed().flatMap(t => t.p).concat(joints.map(j => j.pivot));
   // A loop, not Math.min(...points): a spread of many points overflows the call stack.
-  const low = [0, 1, 2].map(i => points.reduce((m, p) => Math.min(m, p[i]), Infinity));
-  const high = [0, 1, 2].map(i => points.reduce((m, p) => Math.max(m, p[i]), -Infinity));
+  const bounds = found => [0, 1, 2].map(i => [found.reduce((m, p) => Math.min(m, p[i]), Infinity), found.reduce((m, p) => Math.max(m, p[i]), -Infinity)]);
+  const fileBounds = bounds(points);
+  const low = fileBounds.map(([min]) => min);
+  const high = fileBounds.map(([, max]) => max);
   const centre = scale(add(low, high), 0.5);
   const size = Math.max(Math.hypot(...sub(high, low)), 0.05);
-  const home = {yaw: -0.9, pitch: 0.45, distance: size * 1.7, target: centre};
+  let view = {centre, span: size};
+  let home = {yaw: -0.9, pitch: 0.45, distance: size * 1.7, target: centre};
   let camera = {...home};
   let selected = null;
   let frame = null;
@@ -105,7 +152,7 @@ function makeViewer(canvas, data, marks, onPick) {
 
   const palette = () => ({
     part: color('--part'), fg: color('--fg'), dim: color('--dim'), grid: color('--grid'), accent: color('--accent'),
-    bad: color('--bad'), warn: color('--warn'), x: color('--ax-x'), y: color('--ax-y'), z: color('--ax-z'),
+    bad: color('--bad'), warn: color('--warn'), ok: color('--ok'), x: color('--ax-x'), y: color('--ax-y'), z: color('--ax-z'),
   });
 
   function basis() {
@@ -129,11 +176,17 @@ function makeViewer(canvas, data, marks, onPick) {
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, width, height);
     const colours = palette();
+    const font = '12px "IBM Plex Mono", ui-monospace, Consolas, monospace';
+    let textLine = 20;  // the next line of text in the top left corner
+    const say = (words, rgb) => {
+      ctx.fillStyle = css(rgb);
+      ctx.font = font;
+      ctx.fillText(words, 12, textLine);
+      textLine += 17;
+    };
     if (!drawHulls) {
-      ctx.fillStyle = css(colours.dim);
-      ctx.font = '12px "IBM Plex Mono", ui-monospace, Consolas, monospace';
-      ctx.fillText(`The hull colliders have ${hullTriangles.toLocaleString('en')} triangles, too many to draw here: `
-        + 'only spheres, cylinders and joints are drawn.', 12, 20);
+      say(`The hull colliders have ${hullTriangles.toLocaleString('en')} triangles, too many to draw here: `
+        + 'only spheres, cylinders and joints are drawn.', colours.dim);
     }
     const b = basis();
     const focal = height / (2 * Math.tan((40 * Math.PI) / 360));
@@ -157,39 +210,55 @@ function makeViewer(canvas, data, marks, onPick) {
       if (v[2] < near) return;
       const [x, y] = toScreen(v);
       ctx.fillStyle = css(rgb);
-      ctx.font = '12px "IBM Plex Mono", ui-monospace, Consolas, monospace';
+      ctx.font = font;
       ctx.fillText(words, x + 6, y - 6);
     };
+    // An arrow from `from` to `to`, its head across the line of sight.
+    const arrow = (from, to, rgb, label) => {
+      const d = sub(to, from);
+      const length = Math.hypot(...d);
+      if (!(length > 1e-9)) return;
+      const along = scale(d, 1 / length);
+      let side = cross(along, b.forward);
+      side = unit(Math.hypot(...side) < 1e-6 ? b.up : side);
+      const back = sub(to, scale(along, length * 0.22));
+      line(from, to, rgb, 2.5);
+      line(to, add(back, scale(side, length * 0.11)), rgb, 2.5);
+      line(to, sub(back, scale(side, length * 0.11)), rgb, 2.5);
+      if (label) text(to, label, rgb);
+    };
 
-    // The floor, as a grid at the run's floor height.
+    // The floor, as a grid at the run's floor height, under what the camera holds.
     if (typeof data.floor === 'number') {
-      const step = Math.pow(10, Math.floor(Math.log10(size / 2)));
-      const reach = Math.ceil((size * 0.9) / step) * step;
+      const step = Math.pow(10, Math.floor(Math.log10(view.span / 2)));
+      const reach = Math.ceil((view.span * 0.9) / step) * step;
+      const [cx, cy] = [Math.round(view.centre[0] / step) * step, Math.round(view.centre[1] / step) * step];
       for (let s = -reach; s <= reach + 1e-9; s += step) {
-        line([centre[0] - reach, centre[1] + s, data.floor], [centre[0] + reach, centre[1] + s, data.floor], colours.grid, 1);
-        line([centre[0] + s, centre[1] - reach, data.floor], [centre[0] + s, centre[1] + reach, data.floor], colours.grid, 1);
+        line([cx - reach, cy + s, data.floor], [cx + reach, cy + s, data.floor], colours.grid, 1);
+        line([cx + s, cy - reach, data.floor], [cx + s, cy + reach, data.floor], colours.grid, 1);
       }
     }
 
-    // The colliders, far to near. A face is lit by how much it faces the camera.
-    const chosen = selected ? data.joints.find(j => j.name === selected) : null;
+    // The colliders, and the grip box of a replay, far to near. A face is lit by how much it faces the camera.
+    const shownJoints = joints.map(placeJoint);
+    const chosen = selected ? shownJoints.find(j => j.name === selected) : null;
     const tinted = new Map();
     for (const j of data.joints) {
       if (marks[j.name] && j.body1) tinted.set(j.body1, marks[j.name] === 'fail' ? colours.bad : tinted.get(j.body1) || colours.warn);
     }
     if (chosen && chosen.body1) tinted.set(chosen.body1, colours.accent);
+    const solids = placed().concat(overlay && overlay.box ? boxTriangles(overlay.box) : []);
     const faces = [];
-    for (const t of triangles) {
+    for (const t of solids) {
       const facing = dot(t.n, unit(sub(b.eye, t.p[0])));
       if (facing <= 0) continue;  // it faces away from the camera
       const v = t.p.map(toView);
       if (v.some(p => p[2] < near)) continue;
-      faces.push({v, depth: (v[0][2] + v[1][2] + v[2][2]) / 3, light: 0.35 + 0.65 * facing, body: t.body});
+      faces.push({v, depth: (v[0][2] + v[1][2] + v[2][2]) / 3, light: 0.35 + 0.65 * facing, tint: t.box ? colours.accent : tinted.get(t.body)});
     }
     faces.sort((a, c) => c.depth - a.depth);
     for (const f of faces) {
-      const base = tinted.get(f.body);
-      const rgb = (base ? colours.part.map((c, i) => c * 0.45 + base[i] * 0.55) : colours.part).map(c => c * f.light);
+      const rgb = (f.tint ? colours.part.map((c, i) => c * 0.45 + f.tint[i] * 0.55) : colours.part).map(c => c * f.light);
       const [a, c, d] = f.v.map(toScreen);
       ctx.fillStyle = css(rgb);
       ctx.strokeStyle = css(rgb);
@@ -206,7 +275,7 @@ function makeViewer(canvas, data, marks, onPick) {
     // The joints: an axis through each pivot. A gripper site: its grasp centre and closing axis.
     shown = [];
     const length = size * 0.12;
-    for (const j of joints) {
+    for (const j of shownJoints) {
       const mark = marks[j.name];
       const isChosen = j.name === selected;
       const rgb = isChosen ? colours.accent : mark === 'fail' ? colours.bad : mark === 'close' ? colours.warn : colours.fg;
@@ -220,32 +289,39 @@ function makeViewer(canvas, data, marks, onPick) {
       ctx.arc(x, y, isChosen ? 5 : 3.5, 0, 2 * Math.PI);
       ctx.fill();
       if (isChosen || mark === 'fail') {
-        ctx.font = '12px "IBM Plex Mono", ui-monospace, Consolas, monospace';
+        ctx.font = font;
         ctx.fillText(j.name, x + 8, y - 8);
       }
     }
-    for (const s of data.sites || []) {
+    for (const s of (data.sites || []).map(placeSite)) {
       line(sub(s.centre, scale(s.closing, s.opening / 2)), add(s.centre, scale(s.closing, s.opening / 2)), colours.accent, 2);
-      if (s.grip_box) gripBox(s.grip_box, colours.accent);
+      if (s.grip_box && !(overlay && overlay.box)) gripBox(s.grip_box, colours.accent);
     }
     if (chosen && chosen.pivot && chosen.direction && chosen.kind !== 'fixed') range(chosen, colours);
     if (data.wheeled) front(colours.fg);
+    if (overlay) marksOfClip(colours);
 
     // The range of the chosen joint, where the body it moves goes: an arc for a revolute joint,
     // around its axis through the centre of what it carries; a segment for a prismatic one. A
-    // tick marks the file pose, where the joint is at its rest position.
+    // tick marks the file pose, where the joint is at its rest position. In a replay, the target
+    // a drive gets is a tick too.
     function range(j, c) {
       if (j.lower === null || j.upper === null) {
         text(j.pivot, 'no limits', c.warn);
         return;
       }
       const rest = j.rest || 0;
+      const target = overlay && overlay.target && overlay.target.joint === j.name ? overlay.target.value : null;
       if (j.kind === 'prismatic') {
-        const from = add(j.pivot, scale(j.direction, j.lower - rest));
-        const to = add(j.pivot, scale(j.direction, j.upper - rest));
-        line(from, to, c.accent, 3);
-        text(from, `lower ${(j.lower * 1000).toFixed(1)} mm`, c.accent);
-        text(to, `upper ${(j.upper * 1000).toFixed(1)} mm`, c.accent);
+        const at = value => add(j.pivot, scale(j.direction, value - rest));
+        line(at(j.lower), at(j.upper), c.accent, 3);
+        text(at(j.lower), `lower ${(j.lower * 1000).toFixed(1)} mm`, c.accent);
+        text(at(j.upper), `upper ${(j.upper * 1000).toFixed(1)} mm`, c.accent);
+        if (target !== null) {
+          const across = scale(unit(cross(j.direction, b.forward)), size * 0.04);
+          line(add(at(target), across), sub(at(target), across), c.ok, 3);
+          text(at(target), `target ${(target * 1000).toFixed(1)} mm`, c.ok);
+        }
         return;
       }
       let arm = j.carried_centre ? sub(j.carried_centre, j.pivot) : [0, 0, 0];
@@ -264,6 +340,10 @@ function makeViewer(canvas, data, marks, onPick) {
       const deg = a => `${((a * 180) / Math.PI).toFixed(1)} deg`;
       text(arc[0], `lower ${deg(j.lower)}`, c.accent);
       text(arc[arc.length - 1], `upper ${deg(j.upper)}`, c.accent);
+      if (target !== null) {
+        line(j.pivot, at(target), c.ok, 2.5, [6, 3]);
+        text(at(target), `target ${deg(target)}`, c.ok);
+      }
     }
 
     // The box GRIP closes the fingers on, as dashed edges.
@@ -289,6 +369,30 @@ function makeViewer(canvas, data, marks, onPick) {
       text(tip, 'front +X', rgb);
     }
 
+    // What a clip of a replay adds: the push on a joint, the pull on the grip box, the path a
+    // wheeled robot drove, and its text in the top left corner.
+    function marksOfClip(c) {
+      const push = overlay.push && shownJoints.find(j => j.name === overlay.push.joint);
+      if (push && overlay.push.sign) {
+        if (push.kind === 'prismatic') {
+          arrow(push.pivot, add(push.pivot, scale(push.direction, overlay.push.sign * size * 0.2)), c.warn, overlay.push.label);
+        } else {
+          // An arc about the axis, in the direction of the torque, with its head at the end.
+          const radius = scale(unit(cross(push.direction, Math.abs(push.direction[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0])), size * 0.1);
+          const arc = Array.from({length: 13}, (_, i) => add(push.pivot, turn(radius, push.direction, overlay.push.sign * 1.6 * i / 12)));
+          polyline(arc.slice(0, -1), c.warn, 2.5);
+          arrow(arc[arc.length - 2], arc[arc.length - 1], c.warn, overlay.push.label);
+        }
+      }
+      if (overlay.pull) {
+        const reach = size * 0.2 * overlay.pull.factor;
+        arrow(overlay.pull.at, add(overlay.pull.at, scale(unit(overlay.pull.direction), reach)), c.warn, overlay.pull.label);
+      }
+      if (overlay.path && overlay.path.length > 1) polyline(overlay.path, c.accent, 2);
+      for (const words of overlay.lines || []) say(words, c.fg);
+      if (overlay.warn) say(overlay.warn, c.bad);
+    }
+
     // The world axes, in the corner: X red, Y green, Z blue.
     const corner = [42, height - 42];
     for (const [axis, rgb, label] of [[[1, 0, 0], colours.x, 'X'], [[0, 1, 0], colours.y, 'Y'], [[0, 0, 1], colours.z, 'Z']]) {
@@ -303,6 +407,21 @@ function makeViewer(canvas, data, marks, onPick) {
       ctx.font = '11px "IBM Plex Mono", ui-monospace, Consolas, monospace';
       ctx.fillText(label, end[0] + 3, end[1] + 3);
     }
+  }
+
+  // The grip box of a replay as 12 triangles in the world: box = {size: [x, y, z], m: its pose}.
+  function boxTriangles(box) {
+    const corner = n => apply(box.m, [0, 1, 2].map(i => (n & (1 << i) ? 0.5 : -0.5) * box.size[i]));
+    const middle = apply(box.m, [0, 0, 0]);
+    const found = [];
+    for (const [a, c, d, e] of [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]]) {
+      for (const p of [[corner(a), corner(c), corner(d)], [corner(a), corner(d), corner(e)]]) {
+        let n = unit(cross(sub(p[1], p[0]), sub(p[2], p[0])));
+        if (dot(n, sub(p[0], middle)) < 0) n = scale(n, -1);
+        found.push({p, n, box: true});
+      }
+    }
+    return found;
   }
 
   const redraw = () => { if (!frame) frame = requestAnimationFrame(draw); };
@@ -352,6 +471,35 @@ function makeViewer(canvas, data, marks, onPick) {
 
   return {
     select(name) { selected = name; redraw(); },
+    // A frame of a replay: newPoses maps a body path to its pose (rows [r0 r1 r2 t]), or null for the
+    // file pose. clip: what the clip adds, as marksOfClip() and range() read it.
+    show(newPoses, clip) {
+      poses = newPoses;
+      overlay = clip || null;
+      world = null;
+      redraw();
+    },
+    // The camera and the floor grid hold the asset in its file pose, and its colliders at each of these
+    // poses too (Maps as show() takes them), such as the frames of a clip. The camera keeps its direction.
+    fit(frames) {
+      const found = points.slice();
+      for (const posed of frames || []) {
+        for (const [body, box] of corners) {
+          const m = posed.get(body);
+          if (!m) continue;
+          for (const corner of box) {
+            const p = apply(m, corner);
+            if (p.every(Number.isFinite)) found.push(p);
+          }
+        }
+      }
+      const [x, y, z] = bounds(found);
+      const middle = [(x[0] + x[1]) / 2, (y[0] + y[1]) / 2, (z[0] + z[1]) / 2];
+      view = {centre: middle, span: Math.max(Math.hypot(x[1] - x[0], y[1] - y[0], z[1] - z[0]), size)};
+      home = {...home, target: middle, distance: view.span * 1.7};
+      camera = {...camera, target: middle, distance: view.span * 1.7};
+      redraw();
+    },
     counts: {triangles: triangles.length, joints: joints.length},
   };
 }

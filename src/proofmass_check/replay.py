@@ -142,22 +142,28 @@ def write(recorder: Recorder, folder: str | Path, engine: str, sha256: str) -> P
     return path
 
 
+def header(data: bytes) -> dict:
+    """The header of a replay file, from its bytes. ValueError when they are not a replay this version reads."""
+    if len(data) < 16 or data[:8] != MAGIC:
+        raise ValueError("not a replay file")
+    version, n = struct.unpack("<II", data[8:16])
+    if version != FORMAT_VERSION:
+        raise ValueError(f"replay format {version}: this version of proofmass-check reads format {FORMAT_VERSION}")
+    return json.loads(data[16 : 16 + n])
+
+
 def read(path: str | Path) -> tuple[dict, list[np.ndarray]]:
     """The header of a replay file, and the frames of each clip as a (frames, values) array."""
     data = Path(path).read_bytes()
-    if data[:8] != MAGIC:
-        raise ValueError(f"{path} is not a replay file")
-    version, n = struct.unpack("<II", data[8:16])
-    if version != FORMAT_VERSION:
-        raise ValueError(f"{path} has replay format {version}; this version reads {FORMAT_VERSION}")
-    header = json.loads(data[16 : 16 + n])
+    found = header(data)
+    n = struct.unpack("<I", data[12:16])[0]
     values = np.frombuffer(data, "<f4", offset=16 + n)
     frames = []
-    for clip in header["clips"]:
-        width = 1 + POSE * (len(header["bodies"]) + (clip["box"] is not None))
+    for clip in found["clips"]:
+        width = 1 + POSE * (len(found["bodies"]) + (clip["box"] is not None))
         end = clip["offset"] + clip["frames"] * width
         frames.append(values[clip["offset"] : end].reshape(clip["frames"], width))
-    return header, frames
+    return found, frames
 
 
 def every(step: float) -> int:

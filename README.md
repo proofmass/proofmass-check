@@ -131,8 +131,9 @@ failed ones first.
 The page also runs checks. In its settings, give the Python of each engine once. A new batch then
 runs the assets you tick in the engines you choose, one run at a time, and shows each check as it
 runs. Its inspector shows an asset before a run: the plan, the joints, and a 3D view of the
-colliders with the joints that failed marked. The page itself runs in any Python that has
-proofmass-check, without an engine.
+colliders with the joints that failed marked. For a run with `--replay` (or Replay ticked in a new
+batch), ▶ in a row of the measurements plays that check in the same 3D view, as the engine moved
+the bodies. The page itself runs in any Python that has proofmass-check, without an engine.
 [docs/gui.md](docs/gui.md) describes it.
 
 ![The inspector: a 3D view of an arm's colliders, the joint that failed in red, and the range of that joint](https://raw.githubusercontent.com/proofmass/proofmass-check/v0.3.0/docs/images/gui-inspect.png)

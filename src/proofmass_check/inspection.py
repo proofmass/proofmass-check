@@ -25,6 +25,7 @@ from proofmass_check.engines.capabilities import CAPABILITIES, supported
 from proofmass_check.geometry import apply, run_floor
 from proofmass_check.model import Asset, Body, Joint
 from proofmass_check.plan import make_plan
+from proofmass_check.report import sha256
 from proofmass_check.rules import GRAVITY, SPEC_VERSION, Settings
 from proofmass_check.wheels import derive
 
@@ -46,6 +47,7 @@ def inspect_asset(file: Path, engine: str, requested: list[str], settings: Setti
         "spec_version": SPEC_VERSION,
         "engine": engine,
         "file": str(file),
+        "sha256": sha256(file),  # of the root file, as in results.json: the replay of a run compares them
         "name": asset.name,
         "variant_sets": usd_reader.variant_sets(file),
         "variants": dict(variants),

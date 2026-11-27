@@ -34,7 +34,7 @@ def manager(settings, monkeypatch):
     """A manager whose workers are fake_worker.py, and whose Pythons all pass their test."""
     monkeypatch.setattr(batches, "check_python", lambda python: (True, "proofmass-check 0.2.0 (spec 0.3)"))
 
-    def fake_command(python, engine, assets, run_dir, events, settle_s, floor, variants):
+    def fake_command(python, engine, assets, run_dir, events, settle_s, floor, variants, replay=False):
         return [sys.executable, str(FAKE_WORKER), str(events), str(run_dir), *assets]
 
     monkeypatch.setattr(batches, "command", fake_command)
@@ -92,6 +92,23 @@ def test_the_command_of_a_worker(tmp_path):
     two = REAL_COMMAND("py", "newton", ["a.usda", "b.usda"], run_dir, events, 3.0, False, ("Physics=MuJoCo",))
     assert two[two.index("--out") + 1] == str(run_dir)  # run writes <out>/<file name>/results.json
     assert two[-5:] == ["--settle", "3.0", "--no-floor", "--variant", "Physics=MuJoCo"]
+    recorded = REAL_COMMAND("py", "physx", ["C:/a/arm.usda"], run_dir, events, SETTLE_S, True, (), replay=True)
+    assert recorded == [*one, "--replay"]
+
+
+def test_a_request_for_a_replay(tmp_path, settings):
+    body = {"assets": [str(usd(tmp_path, "arm.usda"))], "engines": ["physx"]}
+    assert batches.parse_request(body, settings).replay is False
+    assert batches.parse_request(body | {"replay": "yes"}, settings).replay is False  # only true is true
+    asked = batches.parse_request(body | {"replay": True}, settings)
+    assert batches.preview(asked, settings)[0]["command"].endswith("--replay")
+
+
+def test_a_batch_with_a_replay(tmp_path, manager):
+    asked = {"assets": [str(usd(tmp_path, "arm.usda"))], "engines": ["physx"], "replay": True}
+    folder = manager.create(asked)
+    assert json.loads((folder / "batch.json").read_text(encoding="utf-8"))["replay"] is True
+    assert manager.state(folder)["replay"] is True
 
 
 def test_usd_files_of_a_folder(tmp_path):

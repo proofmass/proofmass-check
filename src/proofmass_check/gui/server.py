@@ -197,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "the server failed: see its terminal"})
         if kind == "json":
             return self._send_json(status, payload)
-        return self._send(status, kind, payload.encode("utf-8"))
+        return self._send(status, kind, payload if isinstance(payload, bytes) else payload.encode("utf-8"))
 
     # --- checks on every request
 
@@ -241,6 +241,7 @@ class Handler(BaseHTTPRequestHandler):
             ),
             ("POST", "/api/close"): lambda: self._close(body),
             ("GET", "/api/run"): lambda: runs.details(self.app.run([_one(query, "folder"), _one(query, "run")])),
+            ("GET", "/api/replay"): lambda: self._replay(self.app.run([_one(query, "folder"), _one(query, "run")])),
             ("POST", "/api/compare"): lambda: runs.compare(self._runs(body, at_least=2)),
             ("POST", "/api/pair"): lambda: runs.pair_folders(
                 self.app.folder(body.get("a")), self.app.folder(body.get("b"))
@@ -285,6 +286,15 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(refs, list) or len(refs) < at_least:
             raise ApiError(HTTPStatus.BAD_REQUEST, f"this needs {at_least} runs or more")
         return [self.app.run(ref) for ref in refs]
+
+    def _replay(self, run: runs.Run) -> tuple[HTTPStatus, str, bytes]:
+        """The run's replay.bin (docs/gui.md, section 6.11). The page reads it whole."""
+        try:
+            return HTTPStatus.OK, "application/octet-stream", runs.replay_bytes(run)
+        except LookupError as e:
+            raise ApiError(HTTPStatus.NOT_FOUND, str(e)) from None
+        except ValueError as e:
+            raise ApiError(HTTPStatus.CONFLICT, str(e)) from None
 
     def _report(self, body: dict) -> tuple[HTTPStatus, str, str]:
         chosen = self._runs(body, at_least=1)

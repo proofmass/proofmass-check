@@ -187,3 +187,16 @@ table.joints tbody tr{cursor:pointer}
 .seg{display:inline-flex;border:1px solid var(--line)}
 .seg a{padding:4px 10px;text-decoration:none;color:var(--muted);font-size:13px}
 .seg a.on{background:var(--fg);color:var(--bg)}
+
+/* The replay of a run's checks (docs/gui.md, section 6.11) */
+.player{display:flex;flex-direction:column;gap:10px}
+.player:empty{display:none}
+.player-bar input[type=range]{flex:1;min-width:160px;accent-color:var(--fill)}
+.player-bar .time{font-size:12px;min-width:118px;text-align:right}
+.player-bar button{min-width:40px}
+.clip-title{font:600 13px var(--mono);display:flex;align-items:center;gap:6px}
+.clips{max-height:340px;overflow-y:auto}
+.clips tbody tr{cursor:pointer}
+.clips tr.group td{background:var(--sunk);font-weight:600;cursor:default}
+a.play{display:inline-block;padding:0 7px;border:1px solid var(--line);color:var(--fg);text-decoration:none;font-size:12px;line-height:20px}
+a.play:hover{border-color:var(--fg);color:var(--accent)}

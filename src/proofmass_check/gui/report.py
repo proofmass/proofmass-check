@@ -211,6 +211,8 @@ def _run_section(n: int, d: dict, full_paths: bool) -> str:
         ("Settings", _settings(d["settings"])),
         ("Time", f"{d['seconds']} s" if d["seconds"] is not None else "not recorded"),
     ]
+    if d.get("replay"):  # docs/gui.md, section 6.8: the motion is too large for a report that opens by itself
+        facts.append(("Replay", "recorded next to the results file, where the GUI plays it; not in this report"))
     out = [
         f'<section class=run id="run-{n}"><h2>{escape(d["asset"])} '
         f"<small>{escape(d['engine'])} · {escape(d['id'])}</small> {_result(d)}</h2>",
