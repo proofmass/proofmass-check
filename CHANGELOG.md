@@ -8,6 +8,13 @@ and the spec version.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-27
+
+The checks follow docs/spec.md, version 0.5. The spec holds the base of an asset with position
+drives that is not fixed to the world, leaves out a D6 joint to the world with every axis free, and
+adds INERTIA. A run can record the motion of every body (`--replay`), and the GUI plays it. Results
+of spec 0.4 and 0.5 are not compared.
+
 ### Added
 
 - The GUI plays the replay of a run (docs/gui.md, section 6.11). On a run's page, ▶ in a row of the
@@ -299,7 +306,8 @@ The first release. The checks follow docs/spec.md, version 0.2.
 - The `proofmass-check` command: `run` and `list-checks`.
 - Engines: PhysX in Isaac Sim 6.1, and Newton as an experiment.
 
-[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/proofmass/proofmass-check/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/proofmass/proofmass-check/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/proofmass/proofmass-check/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/proofmass/proofmass-check/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/proofmass/proofmass-check/compare/v0.3.2...v0.3.3
