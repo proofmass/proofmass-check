@@ -6,4 +6,4 @@ Start with the command line: `proofmass-check run asset.usd --engine physx`.
 docs/spec.md describes every check, its rule and its numbers.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"

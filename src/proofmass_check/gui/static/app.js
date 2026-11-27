@@ -373,7 +373,7 @@ function folderView(folderId, batch) {
       ? banner('Some runs did not run every check their asset needs: their engine cannot run it yet. They carry the mark '
         + '"not run", and a pass does not cover those checks. Run them in an engine that can.') : null,
     runs.some(r => (r.gripper_without_site || []).length)
-      ? banner('Some assets have joints that look like a gripper's fingers but no gripper site, so GRIP and SHAKE '
+      ? banner("Some assets have joints that look like a gripper's fingers but no gripper site, so GRIP and SHAKE "
         + 'did not run. They carry the mark "grip not checked".') : null,
     runs.some(r => (r.wheels_without_mobile || []).length)
       ? banner('Some assets have joints that look like wheels but no SimReady_Metadata.mobile, so their wheeled checks '
