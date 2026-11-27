@@ -92,6 +92,15 @@
     },
     "passed": {"type": "boolean", "description": "True when no check failed and the run did not stop with an error."},
     "seconds": {"type": "number"},
-    "error": {"type": "string", "description": "Present when the run stopped with an error."}
+    "error": {"type": "string", "description": "Present when the run stopped with an error."},
+    "replay": {
+      "type": "object",
+      "description": "Present for a run with --replay: the file, next to this one, with the motion of every body in each check (docs/gui.md, section 5.5). Its header carries the same id, which is new for each run.",
+      "required": ["file", "id"],
+      "properties": {
+        "file": {"type": "string", "description": "A file name, without a folder."},
+        "id": {"type": "string", "pattern": "^[0-9a-f]{32}$"}
+      }
+    }
   }
 }

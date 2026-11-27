@@ -5,15 +5,30 @@
 IdealEngine does what a perfect simulator would do: drives reach their targets, limits stop them,
 a dropped asset lands flat on the floor, a gripper holds anything. A test that needs a bad engine
 overrides one method.
+
+With a recorder, each operation records frames as a real engine does: at the start, replay.FPS
+times per second, and at the end. Every body stays in its file pose, and the grip box at the origin.
 """
 
 import math
 
 import numpy as np
 
+from proofmass_check import replay
 from proofmass_check.checks import TITLES
 from proofmass_check.engines.base import BaseTrace, DropOutcome, GripOutcome, JointState, LoadOutcome, Motion
 from proofmass_check.geometry import lowest_collider
+
+
+def record(recorder, asset, seconds, box=False):
+    """The frames of one operation of `seconds`, when the run has a recorder."""
+    if recorder is None:
+        return
+    rows = [np.r_[b.pose[:3, 3], 1.0, 0.0, 0.0, 0.0] for b in asset.bodies.values()]
+    if box:
+        rows.append(np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]))
+    for t in [k / replay.FPS for k in range(math.ceil(seconds * replay.FPS - 1e-9))] + [seconds]:
+        recorder.frame(t, np.array(rows))
 
 
 class IdealEngine:
@@ -21,6 +36,7 @@ class IdealEngine:
     variant_sets = ("PhysX",)
     reads_mjc_actuators = False
     supported = frozenset(TITLES)
+    recorder = None  # the runner sets it for a run with a replay
 
     def __init__(self):
         self.asset = None
@@ -43,6 +59,7 @@ class IdealEngine:
         lowest = min(lowest_collider(b, b.pose[:3, :3], b.pose[:3, 3]) for b in bodies)
         shift = np.array([0.0, 0.0, self.floor - lowest])
         poses = {b.path: (b.pose[:3, :3], b.pose[:3, 3] + shift) for b in bodies}
+        record(self.recorder, self.asset, seconds)
         return DropOutcome(poses=poses, root_speed=0.0, finite=True)
 
     def _clip(self, name, value):
@@ -51,11 +68,13 @@ class IdealEngine:
 
     def settle(self, targets, seconds):
         self.calls.append(("settle", dict(targets), seconds))
+        record(self.recorder, self.asset, seconds)
         return JointState({n: self._clip(n, v) for n, v in targets.items()}, finite=True, max_speed=0.0)
 
     def move(self, targets, seconds, step):
         """Each joint that moves goes at exactly its speed limit."""
         self.calls.append(("move", dict(targets), seconds))
+        record(self.recorder, self.asset, seconds)
         steps = round(seconds / step)
         speeds = {}
         for name, target in targets.items():
@@ -66,14 +85,16 @@ class IdealEngine:
 
     def push(self, joint, effort, seconds):
         self.calls.append(("push", joint, effort))
+        record(self.recorder, self.asset, seconds)
         j = self.asset.joint(joint)
         return j.upper if effort > 0 else j.lower
 
     def grip_scene(self, setup):
-        return IdealGrip(setup)
+        return IdealGrip(setup, self)
 
     def drive(self, wheels, steer, seconds, lift, sample):
         """A robot on wheels that never slip: the left and right wheel speeds set its speed and yaw rate."""
+        record(self.recorder, self.asset, seconds)
         base = self.asset.wheeled
         by_name = {w.name: w for w in base.wheels}
 
@@ -106,11 +127,15 @@ class IdealEngine:
 class IdealGrip:
     """Fingers that stop on the box halfway to their limits, and a box that moves 1 mm along the pull."""
 
-    def __init__(self, setup):
+    def __init__(self, setup, engine=None):
         self.setup = setup
+        self.engine = engine  # for its recorder and asset
         self.trials = []
 
     def trial(self, mass, direction, shake):
         self.trials.append((mass, tuple(np.round(direction, 6)), shake))
+        if self.engine is not None:
+            seconds = self.setup.close_seconds + self.setup.pull_seconds
+            record(self.engine.recorder, self.engine.asset, seconds, box=True)
         closed = {name: limit / 2 for name, limit in self.setup.close.items()}
         return GripOutcome(motion=0.001 * np.asarray(direction, float), closed=closed, finite=True)

@@ -12,6 +12,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from proofmass_check import replay
 from proofmass_check.checks import CheckResult, Measurement, judge, text
 from proofmass_check.engines.base import Engine
 from proofmass_check.geometry import apply
@@ -108,10 +109,16 @@ def _push_both_ways(engine: Engine, asset: Asset, joint: Joint, seconds: float, 
             Measurement(joint.name, side, "push", tried, budget, unit, ok),
         ]
 
+    def pushed(sign: int, limit: float, side: str, tried: float) -> tuple[float, bool]:
+        """How far from the limit one push leaves the joint, and whether that is at the limit."""
+        with replay.label(joint.name, side, f"push {tried:.3g} {unit}") as clip:
+            error = abs(engine.push(joint.name, sign * tried, seconds) - limit)
+        clip.ok = math.isfinite(error) and error <= margin
+        return error, clip.ok
+
     for sign, limit, side in ((1, joint.upper, "upper"), (-1, joint.lower, "lower")):
         tried = effort
-        error = abs(engine.push(joint.name, sign * tried, seconds) - limit)
-        ok = math.isfinite(error) and error <= margin
+        error, ok = pushed(sign, limit, side, tried)
         if ok:
             yield (
                 f"{joint.name}@{side} {text.error(joint, error)} from the limit",
@@ -121,8 +128,7 @@ def _push_both_ways(engine: Engine, asset: Asset, joint: Joint, seconds: float, 
             continue
         while not ok and tried < budget:
             tried = min(tried * PUSH_STEP, budget)
-            error = abs(engine.push(joint.name, sign * tried, seconds) - limit)
-            ok = math.isfinite(error) and error <= margin
+            error, ok = pushed(sign, limit, side, tried)
         if ok:
             row = f"{joint.name}@{side} needs {tried:.3g} {unit} (base push {effort:.3g}, hand {budget:.3g})"
         else:

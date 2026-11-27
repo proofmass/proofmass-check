@@ -19,6 +19,7 @@ from pathlib import Path
 import isaacsim  # must come before any omni or pxr import
 import numpy as np
 
+from proofmass_check import replay
 from proofmass_check.engines.base import (
     BaseTrace,
     DropOutcome,
@@ -31,6 +32,7 @@ from proofmass_check.engines.base import (
 from proofmass_check.engines.capabilities import CAPABILITIES, supported
 from proofmass_check.geometry import matrix_to_quat, quat_to_matrix
 from proofmass_check.model import Asset, Joint
+from proofmass_check.replay import Recorder
 from proofmass_check.rules import GRAVITY
 
 STEP = 1 / 240  # s
@@ -67,6 +69,7 @@ class PhysxEngine:
     name = "physx"
     variant_sets = CAPABILITIES["physx"].variant_sets
     reads_mjc_actuators = CAPABILITIES["physx"].reads_mjc_actuators
+    recorder: Recorder | None = None  # the runner sets it for a run with a replay
 
     def __init__(self):
         apps = (Path(isaacsim.__file__).parent / "apps").as_posix()
@@ -114,6 +117,7 @@ class PhysxEngine:
         if self._scene_key != key:
             self._scene = _Scene(self.asset, self.floor, step, box, hold)
             self._scene_key = key
+        self._scene.recorder = self.recorder
         return self._scene
 
     # --- the operations of the Engine protocol
@@ -144,7 +148,9 @@ class PhysxEngine:
         else:
             positions, rotations = scene.bodies.get_world_poses()
             scene.bodies.set_world_poses(np.asarray(positions) + lift, np.asarray(rotations))
+        scene.begin()
         scene.run(seconds)
+        scene.end()
         moving = scene.art if scene.art is not None else scene.root
         speed = float(np.linalg.norm(moving.get_linear_velocity()))
         poses = scene.body_poses()
@@ -155,9 +161,11 @@ class PhysxEngine:
         scene = self.scene()
         scene.world.reset()
         action = scene.action(targets)
+        scene.begin()
         for _ in range(int(seconds / scene.step)):
             scene.controller.apply_action(action)
-            scene.world.step(render=False)
+            scene.advance()
+        scene.end()
         q, v = scene.joint_state()
         return JointState(
             positions=dict(zip(scene.names, q.tolist(), strict=True)),
@@ -171,12 +179,14 @@ class PhysxEngine:
         action = scene.action(targets)
         index = {n: scene.names.index(n) for n in targets}
         speeds = {n: [] for n in targets}
+        scene.begin()
         for _ in range(int(seconds / step)):
             scene.controller.apply_action(action)
-            scene.world.step(render=False)
+            scene.advance()
             v = np.asarray(scene.art.get_joint_velocities())
             for n, i in index.items():
                 speeds[n].append(float(v[i]))
+        scene.end()
         q, _ = scene.joint_state()
         return Motion(
             speeds={n: np.array(s) for n, s in speeds.items()},
@@ -187,14 +197,18 @@ class PhysxEngine:
     def push(self, joint: str, effort: float, seconds: float) -> float:
         scene = self.scene()
         scene.world.reset()
+        scene.begin()
         if scene.art is not None:
             efforts = np.zeros(len(scene.names))
             efforts[scene.names.index(joint)] = effort
             for _ in range(int(seconds / scene.step)):
                 scene.art.set_joint_efforts(efforts)
-                scene.world.step(render=False)
-            return float(scene.joint_state()[0][scene.names.index(joint)])
-        return _push_free_bodies(scene, self.asset.joint(joint), effort, seconds)
+                scene.advance()
+            position = float(scene.joint_state()[0][scene.names.index(joint)])
+        else:
+            position = _push_free_bodies(scene, self.asset.joint(joint), effort, seconds)
+        scene.end()
+        return position
 
     def grip_scene(self, setup: GripSetup) -> "PhysxGrip":
         return PhysxGrip(self, setup)
@@ -217,16 +231,18 @@ class PhysxEngine:
             actions.append(scene.action(steer))
         every = max(1, round(sample / scene.step))
         times, positions, rotations = [], [], []
+        scene.begin()
         for k in range(int(seconds / scene.step)):
             for action in actions:
                 scene.controller.apply_action(action)
-            scene.world.step(render=False)
+            scene.advance()
             if k % every == 0:
                 position, quat = scene.art.get_world_pose()
                 times.append((k + 1) * scene.step)
                 positions.append(np.asarray(position, float))
                 # In double precision: the tilt is acos of a value close to 1, which single precision rounds.
                 rotations.append(quat_to_matrix(np.asarray(quat, float)))
+        scene.end()
         return BaseTrace(np.array(times), np.array(positions), np.array(rotations))
 
 
@@ -241,6 +257,9 @@ class _Scene:
         from pxr import UsdPhysics
 
         self.asset, self.step = asset, step
+        self.recorder: Recorder | None = None  # PhysxEngine.scene() sets it
+        self._every = replay.every(step)
+        self._steps = self._recorded_at = 0
         World.clear_instance()
         create_new_stage()
         self.world = World(stage_units_in_meters=1.0, physics_dt=step, rendering_dt=step)
@@ -308,7 +327,37 @@ class _Scene:
 
     def run(self, seconds: float) -> None:
         for _ in range(int(seconds / self.step)):
-            self.world.step(render=False)
+            self.advance()
+
+    # --- steps, and the frames of a replay
+
+    def begin(self) -> None:
+        """An operation starts, after its reset: the first frame of its clip."""
+        self._steps = 0
+        self._record()
+
+    def advance(self) -> None:
+        """One physics step. Every few steps, a frame of the replay (replay.every)."""
+        self.world.step(render=False)
+        self._steps += 1
+        if self._steps % self._every == 0:
+            self._record()
+
+    def end(self) -> None:
+        """An operation ends: its last frame, unless the last step gave it."""
+        if self._recorded_at != self._steps:
+            self._record()
+
+    def _record(self) -> None:
+        if self.recorder is None:
+            return
+        positions, quats = (np.asarray(a, float) for a in self.bodies.get_world_poses())
+        poses = np.hstack([positions[self._index], quats[self._index]])  # Isaac Sim's quaternions are w, x, y, z
+        if self.box is not None:
+            position, quat = (np.asarray(a, float)[0] for a in self.box[1].get_world_poses())
+            poses = np.vstack([poses, np.concatenate([position, quat])])
+        self.recorder.frame(self._steps * self.step, poses)
+        self._recorded_at = self._steps
 
     def action(self, targets):
         from isaacsim.core.utils.types import ArticulationAction
@@ -393,7 +442,7 @@ def _push_free_bodies(scene: _Scene, joint: Joint, effort: float, seconds: float
         force, torque = np.zeros((1, 3)), np.zeros((1, 3))
         (force if joint.kind == "prismatic" else torque)[0] = effort * axis
         scene.bodies.apply_forces_and_torques_at_pos(forces=force, torques=torque, indices=index, is_global=True)
-        scene.world.step(render=False)
+        scene.advance()
     return _joint_position(joint, scene.body_poses())[0]
 
 
@@ -424,9 +473,10 @@ class PhysxGrip:
         scene, setup = self.scene, self.setup
         scene.world.reset()
         self.cube.set_mass(mass)
+        scene.begin()
         for _ in range(int(setup.close_seconds / scene.step)):
             scene.controller.apply_action(self.action)
-            scene.world.step(render=False)
+            scene.advance()
         q, _ = scene.joint_state()
         closed = {n: float(q[scene.names.index(n)]) for n in setup.close}
         start = self._in_hand()[0]
@@ -434,7 +484,8 @@ class PhysxGrip:
             g = 1 + math.sin(2 * math.pi * setup.shake_hz * k * scene.step) if shake else 1.0
             self.pull.apply_forces(np.array([mass * GRAVITY * g * np.asarray(direction)]), is_global=True)
             scene.controller.apply_action(self.action)
-            scene.world.step(render=False)
+            scene.advance()
+        scene.end()
         position, rotation = self._in_hand()
         return GripOutcome(
             motion=rotation @ (position - start), closed=closed, finite=bool(np.all(np.isfinite(position)))

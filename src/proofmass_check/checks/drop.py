@@ -6,6 +6,7 @@ import math
 
 import numpy as np
 
+from proofmass_check import replay
 from proofmass_check.checks import CheckResult, Measurement, judge
 from proofmass_check.engines.base import Engine
 from proofmass_check.geometry import lowest_collider, tilt
@@ -23,7 +24,8 @@ def drop(engine: Engine, asset: Asset, floor: float) -> CheckResult:
 
     The tilt is reported, but it does not decide the result.
     """
-    outcome = engine.drop(DROP_HEIGHT, DROP_SECONDS)
+    with replay.label() as clip:
+        outcome = engine.drop(DROP_HEIGHT, DROP_SECONDS)
     lowest = min(
         (
             lowest_collider(asset.bodies[path], rotation, position)
@@ -45,9 +47,10 @@ def drop(engine: Engine, asset: Asset, floor: float) -> CheckResult:
     # With no collider there is nothing to stand on the floor: the asset falls through it.
     colliders = any(asset.bodies[path].colliders for path in outcome.poses)
     floor_text = f"lowest collider {gap_mm:+.2f} mm from the floor" if colliders else "no collider to rest on the floor"
+    clip.ok = resting(finite, speed, gap)
     return judge(
         "DROP",
-        resting(finite, speed, gap),
+        clip.ok,
         f"final speed {speed:.4f} m/s, {floor_text}, tilted {turned:.0f} deg",
         measurements,
     )

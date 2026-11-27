@@ -261,9 +261,10 @@ starts once. `Engine.open()` loads each asset into the same engine.
 
 ### 5.5 The replay
 
-Not built (phase 4). `results.json` holds the numbers that a check compared with its rule, but
-not the motion that gave them. The engines compute the pose of every body at every step, and
-nothing keeps it. The option `--replay` writes that motion to `replay.bin`, next to `results.json`:
+Built in phase 4 (`replay.py`). The player of section 6.11 is not built yet. `results.json` holds
+the numbers that a check compared with its rule, but not the motion that gave them. The engines
+compute the pose of every body at every step, and nothing kept it. The option `--replay` writes
+that motion to `replay.bin`, next to `results.json`:
 
 ```bash
 proofmass-check run path/to/asset.usd --engine physx --replay
@@ -275,7 +276,8 @@ With several assets, each asset's folder gets its own `replay.bin`, as it gets i
 **What is recorded:**
 
 - Each engine operation gives one clip: a settle, a move, a push, a drop, a drive, or one trial of
-  the grip scene. LOAD gives none, because it only builds the asset.
+  the grip scene. LOAD gives none, because it only builds the asset, and INERTIA gives none,
+  because it reads the file and runs nothing.
 - A frame holds its time from the start of the clip, then the position and rotation of each body
   of `asset.bodies`, in the world. A clip of the grip scene also holds the grip box, after the
   bodies.
@@ -374,8 +376,11 @@ simulated time. Estimates from the rule numbers in spec.md, not measured:
 | AgiBot's G2, 46 joints | about 50 | about 420 s | about 18 MB |
 
 **Cost.** Each frame reads the pose of every body from the engine. In Newton, it also waits for
-the GPU, and the CUDA graphs are shorter. This cost is not measured yet. Phase 4 measures it on
-the G2 in both engines (section 11).
+the GPU, and the CUDA graphs are shorter. In Newton on an RTX 4090 laptop GPU, recording made a
+run of the test arm 16 % longer (9.8 s to 11.4 s, 2615 frames) and of the test gripper 21 % longer
+(24.3 s to 29.3 s, 4179 frames). PhysX and the G2 are not measured yet (section 11). If the cost
+stays this high, Newton can copy the poses to a buffer on the GPU inside the CUDA graph, and read
+them once at the end of the operation.
 
 **The same results.** Recording reads the state and never writes it. So `results.json` must be
 the same with and without `--replay`, apart from `seconds` and `replay`. In Newton, graphs of 16
@@ -454,7 +459,8 @@ folded away.
   and it never changes a verdict. In Newton it matters most, because its results can differ from
   run to run (spec.md section 5).
 - When the run has a replay (phase 4), each row has a play button. It opens the inspector and
-  plays the clips of that measurement (section 6.11). A row of LOAD has none: LOAD gives no clip.
+  plays the clips of that measurement (section 6.11). A row of LOAD or INERTIA has none: they
+  run no step, so they give no clip.
 
 **Checks:** each check with its title, verdict, detail line as written (one part per line, and a
 part that ends with FAIL marked), measurements, and a link to
@@ -634,8 +640,9 @@ the inspector (section 4.1).
 
 Phases 1 to 3 are built. Phase 2 was tested with a fake worker (section 9). Its "done when", a
 batch of 10 assets in PhysX and Newton, is still to run on the real engines. Phase 3 was tested on
-the test assets of `tests/usd_assets.py`, not yet on a large package such as the G2. Phase 4 is
-designed (sections 5.5 and 6.11) and not built.
+the test assets of `tests/usd_assets.py`, not yet on a large package such as the G2. In phase 4,
+the recording (section 5.5) is built and was tested in Newton on the test assets, not yet in
+PhysX. The player (section 6.11) is not built.
 
 ## 9. Tests
 

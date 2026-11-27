@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from proofmass_check import replay
 from proofmass_check.checks import CheckResult, Measurement, judge, text
 from proofmass_check.engines.base import Engine
 from proofmass_check.model import Joint
@@ -30,7 +31,8 @@ def move_time(settings: Settings, distance: float, max_speed: float) -> float:
 
 
 def hold(engine: Engine, driven: Sequence[Joint], settings: Settings) -> CheckResult:
-    state = engine.settle(rest_pose(driven), settings.settle_s)
+    with replay.label() as clip:
+        state = engine.settle(rest_pose(driven), settings.settle_s)
     measurements = []
     for joint in driven:
         error, tolerance = abs(state.positions[joint.name] - joint.rest), settings.tolerance(joint.revolute)
@@ -38,7 +40,8 @@ def hold(engine: Engine, driven: Sequence[Joint], settings: Settings) -> CheckRe
         measurements.append(Measurement(joint.name, "", "error", error, tolerance, text.si_unit(joint), ok))
     rows = [f"{m.subject} {text.error(j, m.value)}" for j, m in zip(driven, measurements, strict=True)]
     detail = "; ".join(row + ("" if m.ok else " FAIL") for row, m in zip(rows, measurements, strict=True))
-    return judge("HOLD", all(m.ok for m in measurements), detail, measurements)
+    clip.ok = all(m.ok for m in measurements)
+    return judge("HOLD", clip.ok, detail, measurements)
 
 
 def track(engine: Engine, driven: Sequence[Joint], limited: Sequence[Joint], settings: Settings) -> CheckResult:
@@ -47,11 +50,12 @@ def track(engine: Engine, driven: Sequence[Joint], limited: Sequence[Joint], set
         tolerance = settings.tolerance(joint.revolute)
         for fraction in TRACK_AT:
             target = joint.lower + fraction * (joint.upper - joint.lower)
-            state = engine.settle(
-                {**rest_pose(driven), joint.name: target}, move_time(settings, target - joint.rest, joint.max_speed)
-            )
+            with replay.label(joint.name, f"{fraction:.0%}") as clip:
+                state = engine.settle(
+                    {**rest_pose(driven), joint.name: target}, move_time(settings, target - joint.rest, joint.max_speed)
+                )
             error = abs(state.positions[joint.name] - target)
-            ok = state.finite and error <= tolerance
+            ok = clip.ok = state.finite and error <= tolerance
             measurements.append(
                 Measurement(joint.name, f"{fraction:.0%}", "error", error, tolerance, text.si_unit(joint), ok)
             )
@@ -64,12 +68,12 @@ def limit(engine: Engine, driven: Sequence[Joint], limited: Sequence[Joint], set
     rows, measurements = [], []
     for joint in limited:
         target = joint.upper + OVERSHOOT * (joint.upper - joint.lower)
-        state = engine.settle(
-            {**rest_pose(driven), joint.name: target}, move_time(settings, joint.upper - joint.rest, joint.max_speed)
-        )
+        seconds = move_time(settings, joint.upper - joint.rest, joint.max_speed)
+        with replay.label(joint.name, "upper") as clip:
+            state = engine.settle({**rest_pose(driven), joint.name: target}, seconds)
         past = state.positions[joint.name] - joint.upper
         allowed = LIMIT_TOL * settings.tolerance(joint.revolute)
-        ok = state.finite and past <= allowed
+        ok = clip.ok = state.finite and past <= allowed
         # A joint that stops short of its limit is 0 past it. max() keeps a NaN, which then fails.
         past = max(past, 0.0)
         measurements.append(Measurement(joint.name, "upper", "past the limit", past, allowed, text.si_unit(joint), ok))
@@ -81,12 +85,15 @@ def stable(engine: Engine, driven: Sequence[Joint], limited: Sequence[Joint], se
     """Random poses inside the limits. A pose is unstable when a value is not finite or a joint is too fast."""
     rng = np.random.default_rng(SEED)
     unstable = 0
-    for _ in range(settings.random_poses):
+    for number in range(1, settings.random_poses + 1):
         draws = rng.random(len(limited))
         pose = rest_pose(driven) | {
             j.name: j.lower + d * (j.upper - j.lower) for j, d in zip(limited, draws, strict=True)
         }
-        state = engine.settle(pose, settings.settle_s)
-        unstable += (not state.finite) or state.max_speed > UNSTABLE_SPEED
+        with replay.label(attempt=f"pose {number}") as clip:
+            state = engine.settle(pose, settings.settle_s)
+        bad = (not state.finite) or state.max_speed > UNSTABLE_SPEED
+        clip.ok = not bad
+        unstable += bad
     measurement = Measurement("", "", "unstable poses", int(unstable), 0, "1", unstable == 0)
     return judge("STABLE", unstable == 0, f"{unstable} unstable", [measurement])

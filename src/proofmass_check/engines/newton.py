@@ -36,10 +36,12 @@ from proofmass_check.engines.base import (
 from proofmass_check.engines.capabilities import CAPABILITIES, supported
 from proofmass_check.geometry import quat_to_matrix
 from proofmass_check.model import Asset
+from proofmass_check.replay import Recorder
 from proofmass_check.rules import GRAVITY
 
 STEP = 0.002  # s: 500 Hz, the MuJoCo Warp solver's step here
 CHUNK = 50  # steps in one CUDA graph. An even number, so the two states end in their first order.
+RECORD_CHUNK = 16  # steps in one CUDA graph when the run records a replay: a frame after each, 31 per second
 DEVICE = "cuda:0"
 
 # MuJoCo Warp's buffers, by the solver option that sizes them, with the overflow bits that say they ran out.
@@ -72,6 +74,7 @@ class NewtonEngine:
     name = "newton"
     variant_sets = CAPABILITIES["newton"].variant_sets
     reads_mjc_actuators = CAPABILITIES["newton"].reads_mjc_actuators
+    recorder: Recorder | None = None  # the runner sets it for a run with a replay
 
     def __init__(self):
         self.asset: Asset | None = None
@@ -91,7 +94,7 @@ class NewtonEngine:
 
     def open(self, asset: Asset, floor: float | None, hold_base: float | None = None) -> None:
         self.asset, self.floor, self.hold_base = asset, floor, hold_base
-        self.sim = _Sim(asset, floor, hold_base=hold_base)
+        self.sim = _Sim(asset, floor, hold_base=hold_base, recorder=self.recorder)
 
     def close(self, exit_code: int = 0) -> None:
         self.sim = None
@@ -121,7 +124,9 @@ class NewtonEngine:
         sim = self.sim
         sim.reset(lift=height)
         sim.targets({})
+        sim.begin()
         sim.run(seconds)
+        sim.end()
         body_q, body_qd = sim.s0.body_q.numpy(), sim.s0.body_qd.numpy()
         poses = {}
         for path, i in sim.bodies.items():
@@ -136,7 +141,9 @@ class NewtonEngine:
         sim = self.sim
         sim.reset()
         sim.targets(targets)
+        sim.begin()
         sim.run(seconds)
+        sim.end()
         q = sim.s0.joint_q.numpy()
         names = list(sim.q_at)
         return JointState(
@@ -159,7 +166,9 @@ class NewtonEngine:
         forces = np.zeros(sim.model.joint_dof_count, np.float32)
         forces[sim.qd_at[joint]] = effort
         sim.control.joint_f.assign(forces)
+        sim.begin()
         sim.run(seconds)
+        sim.end()
         return float(sim.s0.joint_q.numpy()[sim.q_at[joint]])
 
     def grip_scene(self, setup: GripSetup) -> "NewtonGrip":
@@ -171,9 +180,22 @@ class _Sim:
 
     The initial state is kept for resets. With a grip box, MuJoCo gets settings for grasping:
     an elliptic friction cone, impratio 10, and several contacts per pair.
+
+    With a recorder, a graph has RECORD_CHUNK steps, and a frame of the replay comes after each.
+    The steps are the same, in the same order: only where the frames are read changes.
     """
 
-    def __init__(self, asset: Asset, floor: float | None, box=None, hold_base: float | None = None):
+    def __init__(
+        self,
+        asset: Asset,
+        floor: float | None,
+        box=None,
+        hold_base: float | None = None,
+        recorder: Recorder | None = None,
+    ):
+        self.recorder = recorder
+        self.chunk = RECORD_CHUNK if recorder is not None else CHUNK
+        self._steps = self._recorded_at = 0
         stage = Usd.Stage.Open(asset.file)  # keep the stage alive until the model is built
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             for name, value in asset.variants.items():
@@ -208,6 +230,7 @@ class _Sim:
         free = int(newton.JointType.FREE)
         self.free = [n for n, t in zip(names, model.joint_type.numpy().tolist(), strict=True) if t == free]
         self.bodies = dict(info["path_body_map"])  # USD path: body index
+        self._recorded = [self.bodies.get(path) for path in asset.bodies]  # None: a body Newton did not build
         self.init = model.state()
         self.s0, self.s1 = model.state(), model.state()
 
@@ -261,13 +284,46 @@ class _Sim:
         n = 2 * round(seconds / STEP / 2)
         if self.graph is None:  # capturing records the steps but does not run them
             with wp.ScopedCapture() as capture:
-                for _ in range(CHUNK):
+                for _ in range(self.chunk):
                     self._step()
             self.graph = capture.graph
-        for _ in range(n // CHUNK):
+        for _ in range(n // self.chunk):
             wp.capture_launch(self.graph)
-        for _ in range(n % CHUNK):
-            self._step()
+            self._steps += self.chunk
+            self._record()
+        for _ in range(n % self.chunk):
+            self.advance()
+
+    # --- the frames of a replay
+
+    def advance(self):
+        """One step outside the CUDA graph. A frame of the replay every self.chunk steps."""
+        self._step()
+        self._steps += 1
+        if self._steps % self.chunk == 0:
+            self._record()
+
+    def begin(self):
+        """An operation starts, after its reset: the first frame of its clip."""
+        self._steps = 0
+        self._record()
+
+    def end(self):
+        """An operation ends: its last frame, unless the last step gave it."""
+        if self._recorded_at != self._steps:
+            self._record()
+
+    def _record(self):
+        if self.recorder is None:
+            return
+        body_q = self.s0.body_q.numpy()  # x y z, then the quaternion as qx qy qz qw
+        rows = [*self._recorded, *([self.box] if self.box is not None else [])]
+        poses = np.full((len(rows), 7), np.nan)
+        for row, i in enumerate(rows):
+            if i is not None:
+                poses[row] = body_q[i][[0, 1, 2, 6, 3, 4, 5]]
+        self.recorder.frame(self._steps * STEP, poses)
+        self._recorded_at = self._steps
 
     def targets(self, values):
         """Position targets, by joint name. The other joints keep the model's own targets."""
@@ -307,7 +363,9 @@ class NewtonGrip:
 
     def __init__(self, engine: NewtonEngine, setup: GripSetup):
         self.setup = setup
-        self.sim = sim = _Sim(engine.asset, engine.floor, box=setup.box, hold_base=engine.hold_base)
+        self.sim = sim = _Sim(
+            engine.asset, engine.floor, box=setup.box, hold_base=engine.hold_base, recorder=engine.recorder
+        )
         self.hand = sim.bodies[setup.site.body]
         driven = {**setup.hold, **setup.close}
         self.goal = {n: v for n, v in driven.items() if n in sim.q_at}
@@ -346,6 +404,7 @@ class NewtonGrip:
         force = np.zeros((sim.model.body_count, 6), np.float32)
         force[sim.box, 2] = mass * GRAVITY  # cancels the box's weight
         self._force(force)
+        sim.begin()
         sim.run(setup.close_seconds)
         q = sim.s0.joint_q.numpy()
         closed = {n: float(q[sim.q_at[n]]) for n in setup.close if n in sim.q_at}
@@ -362,7 +421,8 @@ class NewtonGrip:
                 shaken[sim.box, :3] += pull * (1 + math.sin(2 * math.pi * setup.shake_hz * k * STEP))
                 self._force(shaken)
                 for _ in range(4):
-                    sim._step()
+                    sim.advance()
+        sim.end()
         position, rotation = self._in_hand()
         return GripOutcome(
             motion=rotation @ (position - start), closed=closed, finite=bool(np.all(np.isfinite(position)))
